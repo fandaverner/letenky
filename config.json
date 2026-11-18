@@ -17,6 +17,7 @@
   "errorKcPerKmReturn": 1.0,
   "tours": {
     "enabled": true,
+    "onlyCzech": true,
     "superDiscount": 40,
     "errorDiscount": 60,
     "superPerNight": 1300,

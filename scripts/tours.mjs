@@ -20,10 +20,12 @@ const DEFAULTS = {
   errorPerNight: 800, // Kč/os/noc (letecky, min. 5 nocí) → podezřele levné
   dropPct: 15, // zlevnění oproti minulé ceně stejného termínu
   minRatingPct: 60, // horší hotely neposílat do upozornění
+  onlyCzech: true, // hlásit jen zájezdy s odletem z ČR
   maxPagesCedok: 45,
   maxPagesBlueStyle: 20,
 };
 
+const CZ = ["Praha", "Brno", "Ostrava", "Pardubice", "Karlovy Vary"];
 const today = () => new Date().toISOString().slice(0, 10);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function readJSON(f, fb) {
@@ -112,6 +114,7 @@ async function run() {
     o.prevPrice = prevMin || null;
     o.drop = prevMin && o.price < prevMin ? Math.round((1 - o.price / prevMin) * 100) : null;
     const fly = o.transport === "letecky";
+    o.fromCZ = CZ.includes(o.depCity);
     const reasons = [];
     let tag = null;
     if (o.discount >= cfg.errorDiscount) {
@@ -134,7 +137,7 @@ async function run() {
       reasons.push(`zlevněno o ${o.drop} % (dřív ${fmt(o.prevPrice)})`);
       if (!tag) tag = "zlevneno";
     }
-    o.tag = tag;
+    o.tag = cfg.onlyCzech && !o.fromCZ ? null : tag;
     o.reason = reasons.join(" · ") || null;
   }
 
@@ -154,7 +157,8 @@ async function run() {
     total: offers.length,
     chyba: offers.filter((o) => o.tag === "chyba").length,
     super: offers.filter((o) => o.tag === "super").length,
-    zlevneno: offers.filter((o) => o.drop >= cfg.dropPct).length,
+    zlevneno: offers.filter((o) => o.drop >= cfg.dropPct && (!cfg.onlyCzech || o.fromCZ)).length,
+    fromCZ: offers.filter((o) => o.fromCZ).length,
     countries: new Set(offers.map((o) => o.country)).size,
   };
   const out = { scannedAt: new Date().toISOString(), durationMs: Date.now() - started, sources, counts, settings: cfg, offers, errors };

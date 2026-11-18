@@ -167,7 +167,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
     <div class="stat hot"><div class="n" id="tChyba">–</div><div class="l">podezřele levných zájezdů</div></div>
     <div class="stat ok"><div class="n" id="tSuper">–</div><div class="l">super slev</div></div>
     <div class="stat"><div class="n" id="tDrop">–</div><div class="l">právě zlevněných</div></div>
-    <div class="stat"><div class="n" id="tTotal">–</div><div class="l">sledovaných termínů</div></div>
+    <div class="stat"><div class="n" id="tTotal">–</div><div class="l">termínů s odletem z ČR</div></div>
   </div>
   <div class="tabs" id="ttabs">
     <button class="tab on" data-t="good">🔥 Nejlepší nabídky <span class="c" id="ctGood"></span></button>
@@ -178,7 +178,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
     <label>Do <input type="range" id="tMax" min="5000" max="80000" step="1000" value="80000"> <b id="tMaxV">bez limitu</b></label>
     <label>Země <select id="tCountry"><option value="">všechny</option></select></label>
     <label>Strava <select id="tBoard"><option value="">jakákoli</option><option value="all">All inclusive</option><option value="pol">aspoň polopenze</option></select></label>
-    <label>Odlet <select id="tDep"><option value="">odkudkoli</option><option value="Praha">jen Praha</option></select></label>
+    <label>Odlet <select id="tDep"><option value="cz">z ČR</option><option value="Praha">jen Praha</option><option value="">odkudkoli</option></select></label>
     <label><input type="checkbox" id="tFly" checked> jen letecky</label>
     <label>Řadit <select id="tSort"><option value="price">od nejlevnějšího</option><option value="disc">podle slevy</option><option value="night">cena za noc</option><option value="date">podle termínu</option><option value="rating">hodnocení</option></select></label>
   </div>
@@ -374,7 +374,7 @@ function openSettings(){
 
 // ---------- zájezdy ----------
 let TOURS = null, ttab = "good";
-const TF = { max:80000, country:"", board:"", dep:"", fly:true, sort:"price" };
+const TF = { max:80000, country:"", board:"", dep:"cz", fly:true, sort:"price" };
 const stars = n => n ? "★".repeat(Math.floor(n)) + (n % 1 ? "+" : "") : "";
 async function loadTours(){
   try{ TOURS = await (await fetch("data/tours.json?t="+Date.now())).json(); }catch{ TOURS = { offers:[] }; }
@@ -386,12 +386,13 @@ async function loadTours(){
 function renderTours(){
   const T = TOURS || { offers:[] }, all = T.offers || [], st = T.settings || {};
   $("#tChyba").textContent = T.counts?.chyba ?? 0; $("#tSuper").textContent = T.counts?.super ?? 0;
-  $("#tDrop").textContent = T.counts?.zlevneno ?? 0; $("#tTotal").textContent = T.counts?.total ?? 0;
+  $("#tDrop").textContent = T.counts?.zlevneno ?? 0; $("#tTotal").textContent = T.counts?.fromCZ ?? T.counts?.total ?? 0;
   const f = all.filter(o=>{
     if(TF.max<80000 && o.price>TF.max) return false;
     if(TF.country && o.country!==TF.country) return false;
     if(TF.fly && o.transport!=="letecky") return false;
-    if(TF.dep && o.depCity && o.depCity!==TF.dep) return false;
+    if(TF.dep==="cz" && !o.fromCZ) return false;
+    if(TF.dep==="Praha" && o.depCity!=="Praha") return false;
     const b=(o.board||"").toLowerCase();
     if(TF.board==="all" && !b.includes("all inclusive")) return false;
     if(TF.board==="pol" && !(b.includes("all inclusive")||b.includes("polopenze")||b.includes("plná penze"))) return false;
