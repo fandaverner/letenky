@@ -1,4 +1,5 @@
 name: Hledat letenky
+# Hlídač levných letenek z Prahy
 
 on:
   schedule:
