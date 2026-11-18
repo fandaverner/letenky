@@ -3,12 +3,16 @@
   "months": 6,
   "superOneWay": 700,
   "superReturn": 1500,
-  "longhaulOneWay": 4500,
-  "longhaulReturn": 8000,
   "dealDrop": 0.35,
   "errorDrop": 0.55,
   "maxTransfers": 2,
   "notifyPush": true,
   "notifyEmail": true,
-  "dailyDigest": true
+  "dailyDigest": true,
+  "shortKm": 2500,
+  "longhaulKm": 4000,
+  "superKcPerKmOneWay": 1.0,
+  "superKcPerKmReturn": 1.6,
+  "errorKcPerKmOneWay": 0.6,
+  "errorKcPerKmReturn": 1.0
 }

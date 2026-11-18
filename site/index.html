@@ -258,7 +258,7 @@ function card(o, all){
   return `<div class="card ${o.tag||""}" data-dest="${o.dest}" data-type="${o.type}">
     ${badge}
     <div class="top">
-      <div><div class="dest">${flag(o.country)} ${esc(o.destName)}</div><div class="ctry">${esc(o.countryName)} · ${esc(o.airport)}</div></div>
+      <div><div class="dest">${flag(o.country)} ${esc(o.destName)}</div><div class="ctry">${esc(o.countryName)} · ${esc(o.airport)}${o.km?` · ${o.km.toLocaleString("cs-CZ")} km`:""}</div></div>
       <div class="price">${kc(o.price)}<small>${o.type==="rt"?"zpáteční":"jednosměrná"}</small></div>
     </div>
     <div class="route">PRG ${tm(o.departure)}<span class="ln"></span>✈<span class="ln"></span>${esc(o.airport)}</div>
@@ -319,7 +319,8 @@ function openSettings(){
     <div class="hint" style="font-size:14px;line-height:1.8">
       Odlet: <b>${s.origin||"PRG"}</b>, ${s.months||6} měsíců dopředu, max. ${s.maxTransfers??2} přestupy<br>
       Super: Evropa jednosměrně do <b>${kc(s.superOneWay)}</b>, zpáteční do <b>${kc(s.superReturn)}</b>, nebo ${Math.round((s.dealDrop||0)*100)} % pod obvyklou cenou<br>
-      Chyba v ceně: dálková jednosměrná do <b>${kc(s.longhaulOneWay)}</b>, zpáteční do <b>${kc(s.longhaulReturn)}</b>, nebo ${Math.round((s.errorDrop||0)*100)} % pod obvyklou cenou</div>
+      Dálkové lety (od ${s.longhaulKm||4000} km): super do <b>${s.superKcPerKmReturn} Kč/km</b> zpáteční, chyba v ceně do <b>${s.errorKcPerKmReturn} Kč/km</b> zpáteční (${s.errorKcPerKmOneWay} Kč/km jednosměrná)<br>
+      Chyba v ceně taky: ${Math.round((s.errorDrop||0)*100)} % pod obvyklou cenou destinace (až po 5 dnech historie)</div>
     <div class="hint" style="margin-top:8px">Změníš je v souboru <a href="${REPO}/edit/main/config.json" target="_blank">config.json</a> (tužka → uprav čísla → Commit changes). Ceny jsou v Kč, slevy jako desetinné číslo (0.55 = 55 %).</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
       <a class="btn pri" href="${REPO}/actions/workflows/scan.yml" target="_blank" style="text-decoration:none">↻ Spustit hledání</a>

@@ -24,8 +24,12 @@ const DEFAULT_SETTINGS = {
   months: 6,
   superOneWay: 700,
   superReturn: 1500,
-  longhaulOneWay: 4500,
-  longhaulReturn: 8000,
+  shortKm: 2500, // do této vzdálenosti platí pevné hranice „super“ výše
+  longhaulKm: 4000, // od této vzdálenosti je let dálkový
+  superKcPerKmOneWay: 1.0, // dálkový let: super, když cena ≤ km × tato hodnota
+  superKcPerKmReturn: 1.6,
+  errorKcPerKmOneWay: 0.6, // dálkový let: chyba v ceně, když cena ≤ km × tato hodnota
+  errorKcPerKmReturn: 1.0,
   dealDrop: 0.35,
   errorDrop: 0.55,
   maxTransfers: 2,
@@ -97,8 +101,8 @@ async function eurRate() {
 async function dictionaries() {
   const file = path.join(CACHE, "dict.json");
   const cached = await readJSON(file, null);
-  if (cached && cached.v === 2 && cached.day >= new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)) return cached;
-  const d = { v: 2, day: today(), cities: {}, countries: {}, airlines: {} };
+  if (cached && cached.v === 3 && cached.day >= new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)) return cached;
+  const d = { v: 3, day: today(), cities: {}, countries: {}, airlines: {} };
   const tr = (o) => o?.name_translations?.cs || o?.name_translations?.en || o?.name || "";
   try {
     const [cities, countries, airlines] = await Promise.all([
@@ -106,7 +110,8 @@ async function dictionaries() {
       getJSON(`${API}/data/en/countries.json`, 60000),
       getJSON(`${API}/data/en/airlines.json`, 60000),
     ]);
-    for (const c of cities) d.cities[c.code] = [tr(c), c.country_code];
+    for (const c of cities)
+      d.cities[c.code] = [tr(c), c.country_code, c.coordinates ? +(+c.coordinates.lat).toFixed(3) : null, c.coordinates ? +(+c.coordinates.lon).toFixed(3) : null];
     for (const c of countries) d.countries[c.code] = tr(c);
     for (const a of airlines) if (a.code) d.airlines[a.code] = tr(a) || a.code;
     await writeJSON(file, d);
@@ -170,6 +175,14 @@ const gFlights = (o, d, dep, ret) =>
   "https://www.google.com/travel/flights?hl=cs&curr=CZK&q=" +
   encodeURIComponent(`Flights from ${o} to ${d} on ${dep}${ret ? ` through ${ret}` : " one way"}`);
 
+const distKm = (a, b) => {
+  if (!a || !b || a[2] == null || b[2] == null) return null;
+  const R = 6371, r = Math.PI / 180;
+  const dLat = (b[2] - a[2]) * r, dLon = (b[3] - a[3]) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[2] * r) * Math.cos(b[2] * r) * Math.sin(dLon / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+};
+
 export const fmt = (n) => n.toLocaleString("cs-CZ").replace(/ /g, " ") + " Kč";
 
 // ---------- hlavní sken ----------
@@ -229,6 +242,7 @@ async function runScan({ digest = false } = {}) {
       seen.add(id);
       const city = dict.cities[r.destination];
       const country = city?.[1] || "";
+      const km = distKm(dict.cities[origin], city);
       const nights = ret ? Math.round((Date.parse(ret) - Date.parse(dep)) / 864e5) : null;
       if (nights !== null && nights < 0) continue;
       all.push({
@@ -252,7 +266,9 @@ async function runScan({ digest = false } = {}) {
         duration: r.duration ?? null,
         link: r.link ? `https://www.aviasales.com${r.link}` : "",
         gflink: gFlights(origin, r.destination_airport || r.destination, dep, ret),
-        longhaul: country ? !EUROPE.has(country) : false,
+        km,
+        longhaul: km != null ? km >= settings.longhaulKm : country ? !EUROPE.has(country) : false,
+        short: km != null ? km <= settings.shortKm : country ? EUROPE.has(country) : false,
         baseline: null,
         discount: null,
         tag: null,
@@ -287,18 +303,25 @@ async function runScan({ digest = false } = {}) {
 
     const isRt = o.type === "rt";
     const superMax = isRt ? settings.superReturn : settings.superOneWay;
-    const longMax = isRt ? settings.longhaulReturn : settings.longhaulOneWay;
+    const km = o.km;
+    const errKm = km && o.longhaul ? km * (isRt ? settings.errorKcPerKmReturn : settings.errorKcPerKmOneWay) : null;
+    const supKm = km && o.longhaul ? km * (isRt ? settings.superKcPerKmReturn : settings.superKcPerKmOneWay) : null;
+    // relativní sleva je spolehlivá jen s historií aspoň 5 dní
+    const trusted = past.length >= 5;
 
-    if (o.longhaul && o.price <= longMax) {
+    if (errKm && o.price <= errKm) {
       o.tag = "chyba";
-      o.reason = `Dálkový let za ${fmt(o.price)} – podezřele levné`;
-    } else if (o.discount !== null && o.discount >= settings.errorDrop) {
+      o.reason = `${fmt(o.price)} na ${km.toLocaleString("cs-CZ")} km – podezřele levné`;
+    } else if (trusted && o.discount >= settings.errorDrop) {
       o.tag = "chyba";
       o.reason = `${Math.round(o.discount * 100)} % pod obvyklou cenou (${fmt(o.baseline)})`;
-    } else if (!o.longhaul && o.price <= superMax) {
+    } else if (o.short && o.price <= superMax) {
       o.tag = "super";
       o.reason = `Pod ${fmt(superMax)}`;
-    } else if (o.discount !== null && o.discount >= settings.dealDrop) {
+    } else if (supKm && o.price <= supKm) {
+      o.tag = "super";
+      o.reason = `Levný dálkový let (${km.toLocaleString("cs-CZ")} km)`;
+    } else if (o.discount !== null && o.discount >= (trusted ? settings.dealDrop : settings.errorDrop)) {
       o.tag = "super";
       o.reason = `${Math.round(o.discount * 100)} % pod obvyklou cenou`;
     } else if (o.discount !== null && o.discount >= 0.2) {
