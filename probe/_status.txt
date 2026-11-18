@@ -1,0 +1,7 @@
+c24_region 200 262317 https://urlaub.check24.de/suche/region?airport=PRG&transportType=flight&roomAllocation=A-A&departureDate=2026-11-21&returnDate=2026-12-31&days=7&pageArea=package&offerSort=price&areaSort=price
+c24_hotel 200 264584 https://urlaub.check24.de/suche/hotel?airport=PRG&transportType=flight&roomAllocation=A-A&departureDate=2026-11-21&returnDate=2026-12-31&days=8&page=1&pageArea=package&areaId=546&offerSort=price&areaSort=price&stacked=true
+c24_robots 200 166 https://urlaub.check24.de/robots.txt
+vorflug_prg 200 146170 https://www.5vorflug.de/last-minute/?depap=PRG&dur=7
+vorflug_prg2 200 146755 https://www.5vorflug.de/last-minute/?airport=PRG&dur=7
+vorflug_robots 200 88 https://www.5vorflug.de/robots.txt
+ltur_search 404 36239 https://www.ltur.com/de/urlaub/last-minute.html
