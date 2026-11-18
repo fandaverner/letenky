@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hlídač letenek z Prahy</title>
+<meta name="theme-color" content="#0b1020">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1020;--panel:#121a30;--panel2:#18223d;--line:#24304f;--text:#e8ecf6;--mute:#8d98b5;
+  --acc:#ffb020;--hot:#ff4d3d;--ok:#22c37a;--blue:#5aa2ff;--r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Space Grotesk",system-ui,sans-serif}
+body{min-height:100vh;background:
+  radial-gradient(1200px 600px at 85% -10%,rgba(255,176,32,.10),transparent 60%),
+  radial-gradient(900px 500px at -10% 10%,rgba(90,162,255,.10),transparent 60%),var(--bg)}
+a{color:var(--blue)}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 80px}
+header{display:flex;gap:16px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin:8px 0 18px}
+h1{font-size:clamp(26px,4.4vw,44px);margin:0;letter-spacing:-.02em;line-height:1}
+h1 .from{color:var(--acc)}
+.sub{color:var(--mute);margin-top:8px;font-size:14px}
+.sub b{color:var(--text);font-weight:500}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:10px 14px;border-radius:10px;font:inherit;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.btn:hover{border-color:#3a4a74}
+.btn.pri{background:var(--acc);color:#1a1200;border-color:var(--acc);font-weight:700}
+.btn:disabled{opacity:.5;cursor:default}
+.actions{display:flex;gap:8px}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.stat .n{font-family:"JetBrains Mono",monospace;font-size:26px;font-weight:700}
+.stat .l{color:var(--mute);font-size:13px}
+.stat.hot .n{color:var(--hot)} .stat.ok .n{color:var(--ok)}
+@media(max-width:700px){.board{grid-template-columns:repeat(2,1fr)}}
+.setup{background:linear-gradient(135deg,#1b2442,#141c33);border:1px solid #3a4a74;border-radius:var(--r);padding:16px 18px;margin-bottom:16px}
+.setup h3{margin:0 0 8px}
+.setup ol{margin:6px 0 0 18px;padding:0;color:#c6cee3;line-height:1.7}
+.tabs{display:flex;gap:6px;overflow:auto;margin-bottom:10px;scrollbar-width:none}
+.tab{white-space:nowrap;padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mute);font:inherit;cursor:pointer}
+.tab.on{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:700}
+.tab .c{font-family:"JetBrains Mono",monospace;font-size:12px;margin-left:4px;opacity:.8}
+.filters{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:14px}
+.filters label{display:flex;gap:6px;align-items:center;color:#c6cee3}
+select,input[type=text],input[type=number],input[type=password],input[type=email]{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit}
+input[type=range]{accent-color:var(--acc);width:140px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--mute);padding:6px 10px;font:inherit;cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text)}
+.grid{display:grid;align-items:start;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;position:relative;cursor:pointer;transition:transform .12s,border-color .12s}
+.card:hover{transform:translateY(-2px);border-color:#3a4a74}
+.card.chyba{border-color:rgba(255,77,61,.6);box-shadow:0 0 0 1px rgba(255,77,61,.25),0 10px 30px -12px rgba(255,77,61,.45)}
+.card.super{border-color:rgba(34,195,122,.5)}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.dest{font-size:20px;font-weight:700;line-height:1.15}
+.ctry{color:var(--mute);font-size:13px;margin-top:2px}
+.price{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:24px;white-space:nowrap;text-align:right}
+.price small{display:block;font-size:12px;color:var(--mute);font-weight:500}
+.route{display:flex;align-items:center;gap:8px;margin:12px 0 8px;font-family:"JetBrains Mono",monospace;font-size:13px;color:#c6cee3}
+.route .ln{flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 10px)}
+.meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.pill{border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:#c6cee3}
+.pill.d{color:var(--ok);border-color:rgba(34,195,122,.4)}
+.badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;margin-bottom:8px}
+.badge.chyba{background:var(--hot);color:#fff}
+.badge.super{background:var(--ok);color:#03150c}
+.badge.dobra{background:#2b3a63;color:#cfe0ff}
+.reason{color:var(--mute);font-size:12px;margin-top:8px}
+.links{display:flex;gap:8px;margin-top:10px}
+.links a{font-size:13px;text-decoration:none;border:1px solid var(--line);padding:5px 9px;border-radius:8px;color:var(--text)}
+.links a:hover{border-color:var(--acc)}
+.more{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;display:none}
+.card.open .more{display:block}
+.more table{width:100%;font-size:13px;border-collapse:collapse}
+.more td{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.more td.p{text-align:right;font-family:"JetBrains Mono",monospace}
+.spark{width:100%;height:46px;margin:6px 0}
+.empty{color:var(--mute);text-align:center;padding:50px 10px;border:1px dashed var(--line);border-radius:var(--r)}
+.err{background:rgba(255,77,61,.08);border:1px solid rgba(255,77,61,.4);color:#ffb3ab;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:18px;padding:0;width:min(640px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(3,6,15,.7);backdrop-filter:blur(3px)}
+.dh{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+.db{padding:16px 18px;overflow:auto}
+.db h4{margin:18px 0 8px;color:var(--acc);font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.db h4:first-child{margin-top:0}
+.f{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}
+.f label.w{grid-column:1/-1}
+.f label.ck{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+.hint{font-size:12px;color:var(--mute);line-height:1.5}
+.hint code{background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--acc)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:500;opacity:0;transition:.2s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Levné letenky <span class="from">z Prahy</span></h1>
+      <div class="sub" id="sub">Načítám…</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnScan" title="Spustit hledání hned">↻ Hledat teď</button>
+      <button class="btn" id="btnSet">⚙︎ Nastavení</button>
+    </div>
+  </header>
+
+  <div id="setup"></div>
+  <div id="errs"></div>
+
+  <div class="board">
+    <div class="stat hot"><div class="n" id="sChyba">–</div><div class="l">možné chyby v cenách</div></div>
+    <div class="stat ok"><div class="n" id="sSuper">–</div><div class="l">super levné nabídky</div></div>
+    <div class="stat"><div class="n" id="sMin">–</div><div class="l">nejlevnější let teď</div></div>
+    <div class="stat"><div class="n" id="sDest">–</div><div class="l">sledovaných destinací</div></div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-t="hot">🔥 Chyby v cenách <span class="c" id="cHot"></span></button>
+    <button class="tab" data-t="super">✨ Super levné <span class="c" id="cSuper"></span></button>
+    <button class="tab" data-t="all">🌍 Kamkoli nejlevněji <span class="c" id="cAll"></span></button>
+    <button class="tab" data-t="spec">🏷️ Akce aerolinek <span class="c" id="cSpec"></span></button>
+  </div>
+
+  <div class="filters" id="filters">
+    <span class="seg" id="fType"><button data-v="any" class="on">Vše</button><button data-v="rt">Zpáteční</button><button data-v="ow">Jednosměrné</button></span>
+    <span class="seg" id="fReg"><button data-v="any" class="on">Všude</button><button data-v="eu">Evropa</button><button data-v="long">Dálkové</button></span>
+    <label>Do <input type="range" id="fMax" min="300" max="30000" step="100" value="30000"> <b id="fMaxV">bez limitu</b></label>
+    <label>Měsíc <select id="fMonth"><option value="">jakýkoli</option></select></label>
+    <label><input type="checkbox" id="fDirect"> jen přímé</label>
+    <label><input type="checkbox" id="fWeekend"> víkendovky</label>
+    <label>Řadit <select id="fSort"><option value="price">od nejlevnější</option><option value="disc">podle slevy</option><option value="date">podle data</option></select></label>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <footer>Ceny pocházejí z vyhledávání uživatelů Aviasales za posledních 48 h a přepočítávají se kurzem ČNB.<br>
+  „Chyba v ceně“ = výrazně pod obvyklou cenou dané destinace nebo podezřele levný dálkový let. Před nákupem vždy ověř aktuální cenu.</footer>
+</div>
+
+<dialog id="dlg">
+  <div class="dh"><b>Nastavení hlídače</b><button class="btn" onclick="dlg.close()">✕</button></div>
+  <div class="db" id="dlgBody"></div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const ls = { get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}} };
+const kc = n => n == null ? "–" : Math.round(n).toLocaleString("cs-CZ") + " Kč";
+const d = iso => { const x = new Date(iso); return isNaN(x) ? "" : x.toLocaleDateString("cs-CZ",{day:"numeric",month:"numeric"}) };
+const dw = iso => { const x = new Date(iso); return isNaN(x) ? "" : x.toLocaleDateString("cs-CZ",{weekday:"short",day:"numeric",month:"numeric"}) };
+const tm = iso => { const m = /T(\d\d:\d\d)/.exec(iso||""); return m ? m[1] : "" };
+const flag = cc => cc && cc.length===2 ? String.fromCodePoint(...[...cc.toUpperCase()].map(c=>0x1f1a5+c.charCodeAt(0))) : "✈️";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const MONTHS = ["leden","únor","březen","duben","květen","červen","červenec","srpen","září","říjen","listopad","prosinec"];
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),2600)}
+function ago(iso){const m=Math.round((Date.now()-new Date(iso))/60000); if(m<1)return"právě teď"; if(m<60)return`před ${m} min`; const h=Math.round(m/60); return h<24?`před ${h} h`:`před ${Math.round(h/24)} dny`}
+
+let DATA = null, STATUS = null, HIST = null, tab = "hot";
+const F = { type:"any", reg:"any", max:30000, month:"", direct:false, weekend:false, sort:"price" };
+
+async function load(){
+  try{ const r = await fetch("data/latest.json?t="+Date.now()); DATA = await r.json(); STATUS = DATA.status || {}; }
+  catch(e){ $("#sub").textContent = "Nepodařilo se načíst data."; return; }
+  render();
+}
+
+const SECRETS_URL = "https://github.com/fandaverner/letenky/settings/secrets/actions";
+function renderSetup(){
+  const s = STATUS; const steps=[];
+  if(!s.hasToken) steps.push(`Zaregistruj se zdarma na <a href="https://www.travelpayouts.com/" target="_blank">travelpayouts.com</a>, připoj program <b>Aviasales</b>, v profilu zkopíruj <b>API token</b> a ulož ho na GitHubu jako secret <code>TRAVELPAYOUTS_TOKEN</code> (<a href="${SECRETS_URL}" target="_blank">otevřít Secrets</a>).`);
+  if(!s.hasPush) steps.push(`Do mobilu nainstaluj aplikaci <b>ntfy</b> (<a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank">Android</a> / <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank">iPhone</a>), přihlas se k odběru vlastního tajného tématu a to samé téma ulož jako secret <code>NTFY_TOPIC</code>.`);
+  if(!s.hasEmail) steps.push(`Pro e-maily si založ zdarma účet na <a href="https://resend.com" target="_blank">resend.com</a>, vytvoř API klíč a ulož ho jako secret <code>RESEND_API_KEY</code>; svůj e-mail jako <code>ALERT_EMAIL</code>.`);
+  $("#setup").innerHTML = steps.length ? `<div class="setup"><h3>Ještě pár kroků a hlídač pojede sám</h3><ol>${steps.map(x=>`<li>${x}</li>`).join("")}</ol></div>` : "";
+}
+
+function render(){
+  renderSetup();
+  const D = DATA, offers = D.offers||[];
+  const running = "";
+  $("#sub").innerHTML = D.scannedAt
+    ? `Poslední hledání <b>${ago(D.scannedAt)}</b> · ${D.counts?.raw?.toLocaleString("cs-CZ")||0} cen · kurz ${D.rate||"?"} Kč/€ · hlídám 6× denně${running}`
+    : `Zatím neproběhlo žádné hledání.`;
+  $("#errs").innerHTML = (D.errors||[]).length ? `<div class="err">⚠️ ${D.errors.map(esc).join("<br>")}</div>` : "";
+  $("#sChyba").textContent = D.counts?.chyba ?? 0;
+  $("#sSuper").textContent = D.counts?.super ?? 0;
+  $("#sMin").textContent = offers.length ? kc(Math.min(...offers.map(o=>o.price))) : "–";
+  $("#sDest").textContent = D.counts?.destinations ?? 0;
+
+  const mSel = $("#fMonth"), cur = mSel.value;
+  mSel.innerHTML = `<option value="">jakýkoli</option>` + (D.months||[]).map(m=>`<option value="${m}">${MONTHS[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join("");
+  mSel.value = cur;
+
+  const grouped = list => { // nejlevnější pro destinaci+typ
+    const m = new Map(); for(const o of list){const k=o.type+o.dest; if(!m.has(k)||o.price<m.get(k).price)m.set(k,o)} return [...m.values()] };
+  const f = filtered(offers);
+  const sets = {
+    hot: grouped(f.filter(o=>o.tag==="chyba")),
+    super: grouped(f.filter(o=>o.tag==="super")),
+    all: (()=>{const m=new Map(); for(const o of f){if(!m.has(o.dest)||o.price<m.get(o.dest).price)m.set(o.dest,o)} return [...m.values()]})(),
+  };
+  $("#cHot").textContent = sets.hot.length; $("#cSuper").textContent = sets.super.length; $("#cAll").textContent = sets.all.length;
+  $("#cSpec").textContent = (D.specials||[]).length;
+  $("#filters").style.display = tab==="spec" ? "none" : "";
+
+  const g = $("#grid");
+  if(tab==="spec"){
+    const sp = D.specials||[];
+    g.innerHTML = sp.length ? sp.map(specCard).join("") : `<div class="empty">Teď nejsou žádné akce aerolinek z Prahy.</div>`;
+    return;
+  }
+  const list = sort(sets[tab]);
+  g.innerHTML = list.length ? list.slice(0,300).map(o=>card(o, offers)).join("")
+    : `<div class="empty">${!offers.length ? "Zatím žádná data – po doplnění tokenu spusť hledání tlačítkem „Hledat teď“." :
+       tab==="hot" ? "Teď žádná podezřele levná letenka. Hlídač dál hlídá a ozve se 🔔" : "Nic neodpovídá filtrům."}</div>`;
+}
+
+function filtered(list){
+  return list.filter(o=>{
+    if(F.type!=="any" && o.type!==F.type) return false;
+    if(F.reg==="eu" && o.longhaul) return false;
+    if(F.reg==="long" && !o.longhaul) return false;
+    if(o.price > F.max && F.max < 30000) return false;
+    if(F.month && o.departure.slice(0,7)!==F.month) return false;
+    if(F.direct && (o.transfers>0 || (o.returnTransfers||0)>0)) return false;
+    if(F.weekend){
+      if(o.type!=="rt") return false;
+      const wd = new Date(o.departure).getDay(); // 4=čt 5=pá 6=so
+      if(![4,5,6].includes(wd) || o.nights<1 || o.nights>4) return false;
+    }
+    return true;
+  });
+}
+function sort(l){
+  const c=[...l];
+  if(F.sort==="disc") c.sort((a,b)=>(b.discount||0)-(a.discount||0));
+  else if(F.sort==="date") c.sort((a,b)=>a.departure.localeCompare(b.departure));
+  else c.sort((a,b)=>a.price-b.price);
+  return c;
+}
+
+function card(o, all){
+  const badge = o.tag==="chyba" ? `<span class="badge chyba">🔥 CHYBA V CENĚ?</span>` : o.tag==="super" ? `<span class="badge super">SUPER CENA</span>` : o.tag==="dobra" ? `<span class="badge dobra">POD PRŮMĚREM</span>` : "";
+  const when = o.ret ? `${dw(o.departure)} → ${dw(o.ret)}` : dw(o.departure);
+  const tr = t => t===0 ? `<span class="pill d">přímý</span>` : `<span class="pill">${t} přestup${t>1?"y":""}</span>`;
+  const others = all.filter(x=>x.dest===o.dest && x.type===o.type && x.id!==o.id).sort((a,b)=>a.departure.localeCompare(b.departure)).slice(0,8);
+  return `<div class="card ${o.tag||""}" data-dest="${o.dest}" data-type="${o.type}">
+    ${badge}
+    <div class="top">
+      <div><div class="dest">${flag(o.country)} ${esc(o.destName)}</div><div class="ctry">${esc(o.countryName)} · ${esc(o.airport)}</div></div>
+      <div class="price">${kc(o.price)}<small>${o.type==="rt"?"zpáteční":"jednosměrná"}</small></div>
+    </div>
+    <div class="route">PRG ${tm(o.departure)}<span class="ln"></span>✈<span class="ln"></span>${esc(o.airport)}</div>
+    <div class="meta"><span class="pill">📅 ${when}</span>${o.nights!=null?`<span class="pill">${o.nights} nocí</span>`:""}${tr(o.transfers)}${o.airlineName?`<span class="pill">${esc(o.airlineName)}</span>`:""}</div>
+    ${o.reason?`<div class="reason">${esc(o.reason)}${o.baseline&&o.tag!=="chyba"?` · obvykle ${kc(o.baseline)}`:""}</div>`:""}
+    <div class="links"><a href="${o.gflink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Google Flights ↗</a>${o.link?`<a href="${o.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Aviasales ↗</a>`:""}</div>
+    <div class="more"><div class="hint">Vývoj nejnižší ceny</div><svg class="spark"></svg>
+      ${others.length?`<table>${others.map(x=>`<tr><td>${x.ret?`${d(x.departure)} – ${d(x.ret)}`:d(x.departure)}</td><td>${x.transfers===0?"přímý":x.transfers+" př."}</td><td class="p"><a href="${x.gflink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${kc(x.price)}</a></td></tr>`).join("")}</table>`:""}
+    </div>
+  </div>`;
+}
+function specCard(s){
+  return `<div class="card super"><span class="badge super">AKCE ${esc(s.airlineName||"")}</span>
+    <div class="top"><div><div class="dest">✈️ ${esc(s.destName)}</div><div class="ctry">${esc(s.title||s.mini||"")}</div></div><div class="price">${kc(s.price)}</div></div>
+    <div class="meta" style="margin-top:10px"><span class="pill">📅 ${dw(s.departure)}${s.ret?" → "+dw(s.ret):""}</span></div>
+    <div class="links"><a href="${s.gflink}" target="_blank" rel="noopener">Google Flights ↗</a>${s.link?`<a href="${s.link}" target="_blank" rel="noopener">Aviasales ↗</a>`:""}</div></div>`;
+}
+
+async function spark(el){
+  const svg = $(".spark", el); if(svg.dataset.done) return; svg.dataset.done=1;
+  try{
+    if(!HIST) HIST = await (await fetch("data/history.json?t="+Date.now())).json();
+    const points = HIST[`${el.dataset.type}|${el.dataset.dest}`] || [];
+    if(points.length<2){ svg.outerHTML = `<div class="hint">Historie se teprve sbírá (${points.length} den).</div>`; return; }
+    const W=300,H=46, ps=points.map(p=>p[1]), mn=Math.min(...ps), mx=Math.max(...ps)||1;
+    const xy = points.map((p,i)=>[i/(points.length-1)*W, H-4-(p[1]-mn)/((mx-mn)||1)*(H-8)]);
+    svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio","none");
+    svg.innerHTML = `<polyline fill="none" stroke="#ffb020" stroke-width="2" vector-effect="non-scaling-stroke" points="${xy.map(p=>p.join(",")).join(" ")}"/>
+      <circle cx="${xy.at(-1)[0]}" cy="${xy.at(-1)[1]}" r="3" fill="#ffb020"/>`;
+    svg.insertAdjacentHTML("afterend",`<div class="hint">min ${kc(mn)} · max ${kc(mx)} · ${points.length} dní</div>`);
+  }catch{}
+}
+
+// ----- události -----
+$("#tabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; tab=b.dataset.t; $$(".tab").forEach(x=>x.classList.toggle("on",x===b)); render(); };
+for(const [id,key] of [["#fType","type"],["#fReg","reg"]]) $(id).onclick = e => { const b=e.target.closest("button"); if(!b) return; F[key]=b.dataset.v; $$("button",$(id)).forEach(x=>x.classList.toggle("on",x===b)); render(); };
+$("#fMax").oninput = e => { F.max=+e.target.value; $("#fMaxV").textContent = F.max>=30000?"bez limitu":kc(F.max); render(); };
+$("#fMonth").onchange = e => { F.month=e.target.value; render(); };
+$("#fDirect").onchange = e => { F.direct=e.target.checked; render(); };
+$("#fWeekend").onchange = e => { F.weekend=e.target.checked; render(); };
+$("#fSort").onchange = e => { F.sort=e.target.value; render(); };
+$("#grid").onclick = e => { const c=e.target.closest(".card[data-dest]"); if(!c) return; c.classList.toggle("open"); if(c.classList.contains("open")) spark(c); };
+
+const REPO = "https://github.com/fandaverner/letenky";
+$("#btnScan").onclick = () => window.open(REPO+"/actions/workflows/scan.yml","_blank");
+$("#btnSet").onclick = () => openSettings();
+
+function openSettings(){
+  const s = DATA?.settings || {}; const st = STATUS || {};
+  const ok = b => b ? "✅" : "❌";
+  $("#dlgBody").innerHTML = `
+    <h4>Stav</h4>
+    <div class="hint" style="font-size:14px;line-height:1.9">${ok(st.hasToken)} Travelpayouts token<br>${ok(st.hasPush)} Push do mobilu (ntfy)<br>${ok(st.hasEmail)} E-mail (Resend)</div>
+    <h4>Klíče a hesla</h4>
+    <div class="hint">Ukládají se bezpečně na GitHubu v <a href="${SECRETS_URL}" target="_blank">Settings → Secrets → Actions</a> (tlačítko <b>New repository secret</b>):<br>
+    <code>TRAVELPAYOUTS_TOKEN</code>, <code>NTFY_TOPIC</code>, <code>RESEND_API_KEY</code>, <code>ALERT_EMAIL</code></div>
+    <h4>Kdy je to „super“ a kdy „chyba v ceně“</h4>
+    <div class="hint" style="font-size:14px;line-height:1.8">
+      Odlet: <b>${s.origin||"PRG"}</b>, ${s.months||6} měsíců dopředu, max. ${s.maxTransfers??2} přestupy<br>
+      Super: Evropa jednosměrně do <b>${kc(s.superOneWay)}</b>, zpáteční do <b>${kc(s.superReturn)}</b>, nebo ${Math.round((s.dealDrop||0)*100)} % pod obvyklou cenou<br>
+      Chyba v ceně: dálková jednosměrná do <b>${kc(s.longhaulOneWay)}</b>, zpáteční do <b>${kc(s.longhaulReturn)}</b>, nebo ${Math.round((s.errorDrop||0)*100)} % pod obvyklou cenou</div>
+    <div class="hint" style="margin-top:8px">Změníš je v souboru <a href="${REPO}/edit/main/config.json" target="_blank">config.json</a> (tužka → uprav čísla → Commit changes). Ceny jsou v Kč, slevy jako desetinné číslo (0.55 = 55 %).</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+      <a class="btn pri" href="${REPO}/actions/workflows/scan.yml" target="_blank" style="text-decoration:none">↻ Spustit hledání</a>
+      <a class="btn" href="${REPO}/actions/workflows/scan.yml" target="_blank" style="text-decoration:none">🔔 Test upozornění</a>
+    </div>
+    <div class="hint" style="margin-top:8px">Na stránce klikni <b>Run workflow</b>; pro test zaškrtni „Jen poslat testovací upozornění“.</div>`;
+  dlg.showModal();
+}
+
+load();
+setInterval(load, 5*60*1000);
+</script>
+</body>
+</html>
