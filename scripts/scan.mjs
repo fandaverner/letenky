@@ -459,15 +459,27 @@ async function notify(offers, settings, digest, latest) {
 }
 
 async function sendPush(m) {
+  const topic = SECRETS.ntfyTopic.replace(/^https?:\/\/ntfy\.sh\//, "").replace(/[\s"'\/]/g, "");
+  const hint = `téma ${topic.length} znaků, začíná „${topic.slice(0, 9)}“, končí „${topic.slice(-2)}“`;
   try {
     const r = await fetch("https://ntfy.sh/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic: SECRETS.ntfyTopic, ...m }),
+      body: JSON.stringify({ topic, ...m }),
     });
-    return r.ok ? "ok" : `HTTP ${r.status}`;
+    const body = await r.text();
+    if (r.ok) return `ok (${hint})`;
+    console.log("ntfy JSON odpověď:", r.status, body.slice(0, 300));
+    // záložní jednoduché odeslání
+    const r2 = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers: { Title: "Letenky z Prahy", Tags: (m.tags || []).join(",") },
+      body: `${m.title}\n${m.message}`,
+    });
+    const body2 = await r2.text();
+    return r2.ok ? `ok přes záložní cestu (${hint})` : `HTTP ${r.status}/${r2.status}: ${body2.slice(0, 200)} (${hint})`;
   } catch (e) {
-    return String(e);
+    return `${String(e)} (${hint})`;
   }
 }
 
