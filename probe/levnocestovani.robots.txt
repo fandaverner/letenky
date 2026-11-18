@@ -1,8 +1,0 @@
-User-agent: *
-    Allow: /
-    Disallow: /ebooks/*
-    Disallow: /s/*
-    Disallow: /tip/*
-    
-    Sitemap: https://levnocestovani.cz/sitemap.xml
-    

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Hlídač letenek z Prahy</title>
+<title>Hlídač letenek a zájezdů</title>
 <meta name="theme-color" content="#0b1020">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
@@ -98,6 +98,22 @@ dialog::backdrop{background:rgba(3,6,15,.7);backdrop-filter:blur(3px)}
 .toast.on{opacity:1}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
+.mode{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px;margin:0 0 16px;gap:4px}
+.mode button{border:0;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer}
+.mode button.on{background:var(--acc);color:#1a1200}
+.tcard{padding:0;overflow:hidden;cursor:default}
+.tcard .ph{height:150px;background:#0e1528 center/cover no-repeat;position:relative}
+.tcard .ph .ck{position:absolute;left:10px;top:10px;background:rgba(11,16,32,.85);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700}
+.tcard .ph .disc{position:absolute;right:10px;top:10px;background:var(--hot);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-family:"JetBrains Mono",monospace}
+.tcard .bd{padding:12px 14px 14px}
+.tcard .hn{font-size:17px;font-weight:700;line-height:1.2}
+.tcard .st{color:var(--acc);font-size:13px;margin-left:4px;letter-spacing:1px}
+.tcard .pr{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:10px}
+.tcard .pr .now{white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:22px;font-weight:700}
+.tcard .pr .old{color:var(--mute);text-decoration:line-through;font-size:13px;margin-right:6px}
+.tcard .pr .pn{color:var(--mute);font-size:12px}
+.tcard .go{display:block;text-align:center;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;color:var(--text);text-decoration:none;font-weight:500}
+.tcard .go:hover{border-color:var(--acc)}
 footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-height:1.6}
 </style>
 </head>
@@ -105,7 +121,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
 <div class="wrap">
   <header>
     <div>
-      <h1>Levné letenky <span class="from">z Prahy</span></h1>
+      <h1 id="h1">Levné letenky <span class="from">z Prahy</span></h1>
       <div class="sub" id="sub">Načítám…</div>
     </div>
     <div class="actions">
@@ -114,9 +130,11 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
     </div>
   </header>
 
+  <div class="mode" id="mode"><button data-m="fl" class="on">✈️ Letenky</button><button data-m="tr">🏖️ Zájezdy</button></div>
   <div id="setup"></div>
   <div id="errs"></div>
 
+  <div id="flSec">
   <div class="board">
     <div class="stat hot"><div class="n" id="sChyba">–</div><div class="l">možné chyby v cenách</div></div>
     <div class="stat ok"><div class="n" id="sSuper">–</div><div class="l">super levné nabídky</div></div>
@@ -142,8 +160,32 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
   </div>
 
   <div class="grid" id="grid"></div>
+  </div>
 
-  <footer>Ceny pocházejí z vyhledávání uživatelů Aviasales za posledních 48 h a přepočítávají se kurzem ČNB.<br>
+  <div id="trSec" style="display:none">
+  <div class="board">
+    <div class="stat hot"><div class="n" id="tChyba">–</div><div class="l">podezřele levných zájezdů</div></div>
+    <div class="stat ok"><div class="n" id="tSuper">–</div><div class="l">super slev</div></div>
+    <div class="stat"><div class="n" id="tDrop">–</div><div class="l">právě zlevněných</div></div>
+    <div class="stat"><div class="n" id="tTotal">–</div><div class="l">sledovaných termínů</div></div>
+  </div>
+  <div class="tabs" id="ttabs">
+    <button class="tab on" data-t="good">🔥 Nejlepší nabídky <span class="c" id="ctGood"></span></button>
+    <button class="tab" data-t="drop">📉 Právě zlevněno <span class="c" id="ctDrop"></span></button>
+    <button class="tab" data-t="all">🌍 Všechny last minute <span class="c" id="ctAll"></span></button>
+  </div>
+  <div class="filters">
+    <label>Do <input type="range" id="tMax" min="5000" max="80000" step="1000" value="80000"> <b id="tMaxV">bez limitu</b></label>
+    <label>Země <select id="tCountry"><option value="">všechny</option></select></label>
+    <label>Strava <select id="tBoard"><option value="">jakákoli</option><option value="all">All inclusive</option><option value="pol">aspoň polopenze</option></select></label>
+    <label>Odlet <select id="tDep"><option value="">odkudkoli</option><option value="Praha">jen Praha</option></select></label>
+    <label><input type="checkbox" id="tFly" checked> jen letecky</label>
+    <label>Řadit <select id="tSort"><option value="price">od nejlevnějšího</option><option value="disc">podle slevy</option><option value="night">cena za noc</option><option value="date">podle termínu</option><option value="rating">hodnocení</option></select></label>
+  </div>
+  <div class="grid" id="tgrid"></div>
+  </div>
+
+  <footer>Zájezdy: last minute nabídky CK Čedok a Blue Style, ceny za osobu. Letenky:  ceny z vyhledávání uživatelů Aviasales za posledních 48 h a přepočítávají se kurzem ČNB.<br>
   „Chyba v ceně“ = výrazně pod obvyklou cenou dané destinace nebo podezřele levný dálkový let. Před nákupem vždy ověř aktuální cenu.</footer>
 </div>
 
@@ -293,7 +335,7 @@ async function spark(el){
 }
 
 // ----- události -----
-$("#tabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; tab=b.dataset.t; $$(".tab").forEach(x=>x.classList.toggle("on",x===b)); render(); };
+$("#tabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; tab=b.dataset.t; $$(".tab",$("#tabs")).forEach(x=>x.classList.toggle("on",x===b)); render(); };
 for(const [id,key] of [["#fType","type"],["#fReg","reg"]]) $(id).onclick = e => { const b=e.target.closest("button"); if(!b) return; F[key]=b.dataset.v; $$("button",$(id)).forEach(x=>x.classList.toggle("on",x===b)); render(); };
 $("#fMax").oninput = e => { F.max=+e.target.value; $("#fMaxV").textContent = F.max>=30000?"bez limitu":kc(F.max); render(); };
 $("#fMonth").onchange = e => { F.month=e.target.value; render(); };
@@ -330,8 +372,77 @@ function openSettings(){
   dlg.showModal();
 }
 
-load();
-setInterval(load, 5*60*1000);
+// ---------- zájezdy ----------
+let TOURS = null, ttab = "good";
+const TF = { max:80000, country:"", board:"", dep:"", fly:true, sort:"price" };
+const stars = n => n ? "★".repeat(Math.floor(n)) + (n % 1 ? "+" : "") : "";
+async function loadTours(){
+  try{ TOURS = await (await fetch("data/tours.json?t="+Date.now())).json(); }catch{ TOURS = { offers:[] }; }
+  const cs = [...new Set((TOURS.offers||[]).map(o=>o.country))].sort((a,b)=>a.localeCompare(b,"cs"));
+  const sel = $("#tCountry"), cur = sel.value;
+  sel.innerHTML = `<option value="">všechny</option>` + cs.map(c=>`<option>${esc(c)}</option>`).join(""); sel.value = cur;
+  renderTours();
+}
+function renderTours(){
+  const T = TOURS || { offers:[] }, all = T.offers || [], st = T.settings || {};
+  $("#tChyba").textContent = T.counts?.chyba ?? 0; $("#tSuper").textContent = T.counts?.super ?? 0;
+  $("#tDrop").textContent = T.counts?.zlevneno ?? 0; $("#tTotal").textContent = T.counts?.total ?? 0;
+  const f = all.filter(o=>{
+    if(TF.max<80000 && o.price>TF.max) return false;
+    if(TF.country && o.country!==TF.country) return false;
+    if(TF.fly && o.transport!=="letecky") return false;
+    if(TF.dep && o.depCity && o.depCity!==TF.dep) return false;
+    const b=(o.board||"").toLowerCase();
+    if(TF.board==="all" && !b.includes("all inclusive")) return false;
+    if(TF.board==="pol" && !(b.includes("all inclusive")||b.includes("polopenze")||b.includes("plná penze"))) return false;
+    return true;
+  });
+  const sets = { good: f.filter(o=>o.tag==="chyba"||o.tag==="super"), drop: f.filter(o=>o.drop>=(st.dropPct||15)), all: f };
+  $("#ctGood").textContent = sets.good.length; $("#ctDrop").textContent = sets.drop.length; $("#ctAll").textContent = sets.all.length;
+  let l = [...sets[ttab]];
+  const S = { price:(a,b)=>a.price-b.price, disc:(a,b)=>(b.discount||0)-(a.discount||0), night:(a,b)=>(a.perNight||1e9)-(b.perNight||1e9), date:(a,b)=>a.from.localeCompare(b.from), rating:(a,b)=>(b.ratingPct||0)-(a.ratingPct||0) };
+  l.sort(ttab==="good" && TF.sort==="price" ? (a,b)=>(a.tag===b.tag?a.price-b.price:a.tag==="chyba"?-1:1) : S[TF.sort]);
+  const when = T.scannedAt ? ` · zájezdy aktualizovány ${ago(T.scannedAt)}` : "";
+  if(MODE==="tr") $("#sub").innerHTML = `Last minute zájezdy z ČR${when} · ${Object.entries(T.sources||{}).map(([k,v])=>`${k} ${v}`).join(", ")}`;
+  $("#tgrid").innerHTML = l.length ? l.slice(0,240).map(tcard).join("") :
+    `<div class="empty">${all.length ? "Nic neodpovídá filtrům." : "Zájezdy se ještě nenačetly – první hledání proběhne při nejbližším spuštění."}</div>`;
+}
+function tcard(o){
+  const badge = o.tag==="chyba" ? `<span class="badge chyba">🔥 PODEZŘELE LEVNÉ</span>` : o.tag==="super" ? `<span class="badge super">SUPER CENA</span>` : o.tag==="zlevneno" ? `<span class="badge dobra">📉 ZLEVNĚNO</span>` : "";
+  return `<div class="card tcard ${o.tag==="chyba"?"chyba":o.tag==="super"?"super":""}">
+    <div class="ph" style="background-image:url('${esc(o.img||"")}')"><span class="ck">${esc(o.ck)}</span>${o.discount?`<span class="disc">−${o.discount} %</span>`:""}</div>
+    <div class="bd">${badge}
+      <div class="hn">${esc(o.hotel)}<span class="st">${stars(o.stars)}</span></div>
+      <div class="ctry">${esc(o.country)}${o.region&&o.region!==o.country?" · "+esc(o.region):""}${o.rating?` · ⭐ ${esc(o.rating)}${o.reviews?` (${o.reviews})`:""}`:""}</div>
+      <div class="meta" style="margin-top:10px"><span class="pill">📅 ${dw(o.from)} → ${dw(o.to)}</span><span class="pill">${o.nights} nocí</span>${o.board?`<span class="pill">🍽 ${esc(o.board)}</span>`:""}${o.depCity?`<span class="pill">✈ ${esc(o.depCity)}</span>`:""}</div>
+      ${o.reason?`<div class="reason">${esc(o.reason)}</div>`:""}
+      <div class="pr"><div>${o.orig?`<span class="old">${kc(o.orig)}</span>`:""}<span class="now">${kc(o.price)}</span> <span class="pn">/os.</span></div>${o.perNight?`<span class="pn">${kc(o.perNight)}/noc</span>`:""}</div>
+      <a class="go" href="${esc(o.url)}" target="_blank" rel="noopener">Zobrazit u ${esc(o.ck)} ↗</a>
+    </div></div>`;
+}
+$("#ttabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; ttab=b.dataset.t; $$(".tab",$("#ttabs")).forEach(x=>x.classList.toggle("on",x===b)); renderTours(); };
+$("#tMax").oninput = e => { TF.max=+e.target.value; $("#tMaxV").textContent = TF.max>=80000?"bez limitu":kc(TF.max); renderTours(); };
+$("#tCountry").onchange = e => { TF.country=e.target.value; renderTours(); };
+$("#tBoard").onchange = e => { TF.board=e.target.value; renderTours(); };
+$("#tDep").onchange = e => { TF.dep=e.target.value; renderTours(); };
+$("#tFly").onchange = e => { TF.fly=e.target.checked; renderTours(); };
+$("#tSort").onchange = e => { TF.sort=e.target.value; renderTours(); };
+
+let MODE = location.hash==="#zajezdy" ? "tr" : "fl";
+function setMode(m){
+  MODE = m; $$("#mode button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+  $("#flSec").style.display = m==="fl" ? "" : "none"; $("#trSec").style.display = m==="tr" ? "" : "none";
+  $("#errs").style.display = m==="fl" ? "" : "none";
+  $("#h1").innerHTML = m==="tr" ? 'Levné zájezdy <span class="from">z ČR</span>' : 'Levné letenky <span class="from">z Prahy</span>';
+  try{ history.replaceState(null,"",m==="tr"?"#zajezdy":"#"); }catch{}
+  if(m==="tr") renderTours(); else if(DATA) render();
+}
+$("#mode").onclick = e => { const b=e.target.closest("button"); if(b) setMode(b.dataset.m); };
+const _render = render;
+render = function(){ if(MODE==="fl") _render(); else { renderSetup(); } };
+
+load(); loadTours(); setMode(MODE);
+setInterval(()=>{ load(); loadTours(); }, 5*60*1000);
 </script>
 </body>
 </html>

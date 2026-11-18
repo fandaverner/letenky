@@ -1,8 +1,0 @@
-User-agent: *
-Disallow: /api/
-Disallow: /destination-listing*
-Disallow: /search-results*
-Disallow: /trip-detail*
-Disallow: /trip-listing*
-
-Sitemap: https://dovolena.cz/sitemap.xml

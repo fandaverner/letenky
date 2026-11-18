@@ -14,5 +14,16 @@
   "superKcPerKmOneWay": 1.0,
   "superKcPerKmReturn": 1.6,
   "errorKcPerKmOneWay": 0.6,
-  "errorKcPerKmReturn": 1.0
+  "errorKcPerKmReturn": 1.0,
+  "tours": {
+    "enabled": true,
+    "superDiscount": 40,
+    "errorDiscount": 60,
+    "superPerNight": 1300,
+    "errorPerNight": 800,
+    "dropPct": 15,
+    "minRatingPct": 60,
+    "maxPagesCedok": 45,
+    "maxPagesBlueStyle": 20
+  }
 }

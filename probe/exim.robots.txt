@@ -1,5 +1,0 @@
-User-agent: *
-User-agent: Seznambot
-Crawl-delay: 3
-Request-rate: 20/1m
-Sitemap: https://www.eximtours.cz/sitemap.xml

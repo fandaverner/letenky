@@ -53,6 +53,17 @@ jobs:
           if [ "$(date -u +%H)" = "06" ] && [ "${{ github.event_name }}" = "schedule" ]; then export DIGEST=true; fi
           node scripts/scan.mjs
 
+      - name: Hledat levné zájezdy
+        if: ${{ !inputs.test_notify }}
+        continue-on-error: true
+        run: |
+          H=$(date -u +%H)
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$H" = "06" ] || [ "$H" = "14" ] || [ "$H" = "18" ] || [ ! -f site/data/tours.json ]; then
+            node scripts/tours.mjs
+          else
+            echo "Zájezdy se hledají 3× denně (7, 15 a 19 h)."
+          fi
+
       - name: Uložit data
         if: ${{ !inputs.test_notify }}
         run: |
