@@ -1,0 +1,20 @@
+<html>
+      <head><title>Ověřování / Verification</title></head>
+      <body style='font-family:sans-serif; text-align:center; padding-top:150px; background:#f9f9f9; color:#333;'>
+          <h2>Checking your browser...</h2>
+          <p>Prosím strpení, ověřujeme váš prohlížeč. / Please wait, verifying your browser.</p>
+          <noscript><p style='color:red;'>Pro pokračování musíte mít zapnutý JavaScript. / JavaScript is required.</p></noscript>
+          <script>
+              // Rozdělíme klíč, aby ho nešlo z kódu jednoduše vykopírovat bez spuštění JS
+              var p1 = 'v9XkF2mP7jL4hA1qR8cT5wN0z';
+              var p2 = 'B6yY3gE5uV8iS2oD9xM1bC7n';
+              var p3 = 'A4lJ6fK3pH0rT8w';
+
+              // Složíme cookie a nastavíme ji
+              document.cookie = 'js_challenge_verified=' + p1 + p2 + p3 + '; path=/; max-age=86400; secure';
+
+              // Znovu načteme původní stránku
+              location.reload();
+          </script>
+      </body>
+      </html>

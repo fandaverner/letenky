@@ -1,0 +1,11 @@
+User-Agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+Disallow: /admin/
+Disallow: *comments-reply*
+
+# Markdown for Agents — content negotiation via `Accept: text/markdown`.
+# Content index (llmstxt.org spec) at /llms.txt.
+# Content Signals follow Cloudflare Content Signals Policy:
+# https://blog.cloudflare.com/content-signals-policy/
+
+Sitemap: https://www.cestujlevne.com/sitemap.xml

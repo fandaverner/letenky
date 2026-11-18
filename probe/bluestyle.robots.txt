@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /admin
+Disallow: /obj-*
+Disallow: /objednavka/*
+Disallow: /rezervace/*
+Disallow: /cestovni-pokyny/*
+Disallow: /cestovni-dokumenty/*
+Disallow: /doplnkove-sluzby/*
+Disallow: /internal-assets/*
+Sitemap: https://www.blue-style.cz/sitemap.xml
