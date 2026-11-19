@@ -345,13 +345,52 @@ $("#fSort").onchange = e => { F.sort=e.target.value; render(); };
 $("#grid").onclick = e => { const c=e.target.closest(".card[data-dest]"); if(!c) return; c.classList.toggle("open"); if(c.classList.contains("open")) spark(c); };
 
 const REPO = "https://github.com/fandaverner/letenky";
-$("#btnScan").onclick = () => window.open(REPO+"/actions/workflows/scan.yml","_blank");
+// Spuštění hledání přímo z webu přes GitHub API. Klíč je uložený jen v tomto prohlížeči.
+const ghToken = () => ls.get("ghtoken") || "";
+async function dispatch(testNotify=false){
+  const r = await fetch("https://api.github.com/repos/fandaverner/letenky/actions/workflows/scan.yml/dispatches",{
+    method:"POST", headers:{Authorization:"Bearer "+ghToken(),Accept:"application/vnd.github+json","Content-Type":"application/json"},
+    body:JSON.stringify({ref:"main",inputs:{test_notify:testNotify}})});
+  if(r.status===401||r.status===403||r.status===404) throw Object.assign(new Error("Klíč nefunguje (HTTP "+r.status+")"),{auth:true});
+  if(!r.ok) throw new Error("GitHub vrátil HTTP "+r.status);
+}
+let polling = null;
+async function scanNow(){
+  if(!ghToken()) return openSettings(true);
+  const b=$("#btnScan"); b.disabled=true; b.innerHTML=`<span class="spin"></span> Hledám…`;
+  const before = DATA?.scannedAt, beforeT = TOURS?.scannedAt;
+  try{ await dispatch(); }
+  catch(e){ b.disabled=false; b.innerHTML="↻ Hledat teď"; toast(e.message); if(e.auth) openSettings(true); return; }
+  toast("Hledání spuštěno – výsledky asi za 2–3 minuty");
+  const t0 = Date.now(); clearInterval(polling);
+  polling = setInterval(async ()=>{
+    await load(); await loadTours();
+    const done = (DATA?.scannedAt && DATA.scannedAt!==before) || (TOURS?.scannedAt && TOURS.scannedAt!==beforeT);
+    if(done || Date.now()-t0 > 8*60e3){
+      clearInterval(polling); b.disabled=false; b.innerHTML="↻ Hledat teď";
+      toast(done ? "Hotovo – nabídky jsou aktuální ✓" : "Trvá to déle, zkus obnovit stránku za chvíli");
+    }
+  }, 20000);
+}
+$("#btnScan").onclick = scanNow;
 $("#btnSet").onclick = () => openSettings();
 
-function openSettings(){
+function tokenBox(need){
+  const has = !!ghToken();
+  return `<h4>Tlačítko „Hledat teď“</h4>
+    ${need?`<div class="err" style="margin-bottom:10px">Aby šlo hledání spustit přímo odsud, vlož jednou klíč z GitHubu.</div>`:""}
+    <div class="hint" style="line-height:1.7">1. Otevři <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">GitHub → nový klíč (Fine-grained token)</a><br>
+    2. Název třeba <code>hlidac-web</code>, platnost klidně 1 rok<br>
+    3. <b>Repository access</b> → Only select repositories → <code>letenky</code><br>
+    4. <b>Permissions → Repository → Actions</b> → <b>Read and write</b> (nic dalšího)<br>
+    5. Generate token, zkopíruj a vlož sem:</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><input type="password" id="ghtok" placeholder="${has?"klíč je uložený – vlož nový pro změnu":"github_pat_…"}" style="flex:1"><button class="btn pri" id="ghsave">Uložit</button></div>
+    <div class="hint" style="margin-top:6px">Klíč zůstane jen v tomto prohlížeči (na každém zařízení ho zadáš zvlášť) a umí jen spouštět hledání.</div>`;
+}
+function openSettings(need){
   const s = DATA?.settings || {}; const st = STATUS || {};
   const ok = b => b ? "✅" : "❌";
-  $("#dlgBody").innerHTML = `
+  $("#dlgBody").innerHTML = tokenBox(need===true) + `
     <h4>Stav</h4>
     <div class="hint" style="font-size:14px;line-height:1.9">${ok(st.hasToken)} Travelpayouts token<br>${ok(st.hasPush)} Push do mobilu (ntfy)<br>${ok(st.hasEmail)} E-mail (Resend)</div>
     <h4>Klíče a hesla</h4>
@@ -365,11 +404,20 @@ function openSettings(){
       Chyba v ceně taky: ${Math.round((s.errorDrop||0)*100)} % pod obvyklou cenou destinace (až po 5 dnech historie)</div>
     <div class="hint" style="margin-top:8px">Změníš je v souboru <a href="${REPO}/edit/main/config.json" target="_blank">config.json</a> (tužka → uprav čísla → Commit changes). Ceny jsou v Kč, slevy jako desetinné číslo (0.55 = 55 %).</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
-      <a class="btn pri" href="${REPO}/actions/workflows/scan.yml" target="_blank" style="text-decoration:none">↻ Spustit hledání</a>
-      <a class="btn" href="${REPO}/actions/workflows/scan.yml" target="_blank" style="text-decoration:none">🔔 Test upozornění</a>
+      <button class="btn pri" id="scanD">↻ Spustit hledání</button>
+      <button class="btn" id="testN">🔔 Test upozornění</button>
     </div>
-    <div class="hint" style="margin-top:8px">Na stránce klikni <b>Run workflow</b>; pro test zaškrtni „Jen poslat testovací upozornění“.</div>`;
-  dlg.showModal();
+    <div class="hint" style="margin-top:8px">Bez klíče jde hledání spustit i ručně na <a href="${REPO}/actions/workflows/scan.yml" target="_blank">GitHubu</a> (Run workflow).</div>`;
+  if(!dlg.open) dlg.showModal();
+  $("#ghsave").onclick = async () => {
+    const v = $("#ghtok").value.trim(); if(!v) return toast("Vlož klíč");
+    ls.set("ghtoken", v);
+    try{ const r = await fetch("https://api.github.com/repos/fandaverner/letenky/actions/workflows/scan.yml",{headers:{Authorization:"Bearer "+v}});
+      if(!r.ok) throw new Error(r.status); toast("Klíč funguje ✓"); dlg.close(); }
+    catch(e){ toast("Klíč nefunguje – zkontroluj oprávnění (HTTP "+e.message+")"); }
+  };
+  $("#scanD").onclick = () => { dlg.close(); scanNow(); };
+  $("#testN").onclick = async () => { if(!ghToken()) return toast("Nejdřív ulož klíč"); try{ await dispatch(true); toast("Test odeslán – upozornění přijde do minuty"); }catch(e){ toast(e.message); } };
 }
 
 // ---------- zájezdy ----------
