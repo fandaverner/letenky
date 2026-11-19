@@ -156,7 +156,9 @@ async function specialOffers(token, origin, market) {
 
 async function pickMarket(token, origin, month) {
   const file = path.join(CACHE, "market.json");
-  const saved = await readJSON(file, null);
+  let all = await readJSON(file, {});
+  if (all && "m" in all) all = { PRG: all }; // starší formát
+  const saved = all[origin];
   if (saved && saved.day >= new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)) return saved.m;
   const tries = await Promise.all(
     ["cz", "de", "at", null].map((m) =>
@@ -167,8 +169,8 @@ async function pickMarket(token, origin, month) {
   );
   let best = { m: null, n: -1 };
   for (const t of tries) if (t.n > best.n) best = t;
-  console.log("Trhy:", JSON.stringify(tries));
-  await writeJSON(file, { m: best.m, day: today() });
+  all[origin] = { m: best.m, day: today() };
+  await writeJSON(file, all);
   return best.m;
 }
 
@@ -187,111 +189,35 @@ const distKm = (a, b) => {
 export const fmt = (n) => n.toLocaleString("cs-CZ").replace(/ /g, " ") + " Kč";
 
 // ---------- hlavní sken ----------
-async function runScan({ digest = false } = {}) {
-  const started = Date.now();
-  const settings = { ...DEFAULT_SETTINGS, ...(await readJSON(path.join(ROOT, "config.json"), {})) };
-  const status = { hasToken: !!SECRETS.tpToken, hasPush: !!SECRETS.ntfyTopic, hasEmail: !!(SECRETS.resendKey && SECRETS.email) };
-  const errors = [];
+const DEFAULT_ORIGINS = [
+  { code: "PRG", name: "Praha", cz: true },
+  { code: "BRQ", name: "Brno", cz: true },
+  { code: "OSR", name: "Ostrava", cz: true },
+  { code: "PED", name: "Pardubice", cz: true },
+  { code: "KLV", name: "Karlovy Vary", cz: true },
+  { code: "VIE", name: "Vídeň" },
+  { code: "BTS", name: "Bratislava" },
+  { code: "MUC", name: "Mnichov" },
+  { code: "NUE", name: "Norimberk" },
+  { code: "DRS", name: "Drážďany" },
+  { code: "LEJ", name: "Lipsko" },
+  { code: "BER", name: "Berlín" },
+  { code: "KTW", name: "Katovice" },
+  { code: "KRK", name: "Krakov" },
+  { code: "WRO", name: "Vratislav" },
+  { code: "LNZ", name: "Linec" },
+];
 
-  if (!SECRETS.tpToken) {
-    const res = {
-      scannedAt: new Date().toISOString(),
-      status,
-      settings,
-      offers: [],
-      specials: [],
-      errors: ["Chybí Travelpayouts token – přidej secret TRAVELPAYOUTS_TOKEN v nastavení repozitáře."],
-    };
-    await writeJSON(path.join(DATA, "latest.json"), res);
-    console.log(res.errors[0]);
-    return res;
-  }
-  const token = SECRETS.tpToken;
-  const origin = String(settings.origin).toUpperCase();
-  const [rate, dict] = await Promise.all([eurRate(), dictionaries()]);
-
-  const now = new Date();
-  const months = [];
-  for (let i = 0; i < settings.months; i++) months.push(ym(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1))));
-
-  const market = await pickMarket(token, origin, months[0]);
-
-  const jobs = [];
-  for (const m of months)
-    for (const ow of [true, false])
-      jobs.push(
-        pricesForMonth(token, origin, m, ow, market)
-          .then((rows) => ({ type: ow ? "ow" : "rt", rows }))
-          .catch((e) => {
-            errors.push(`${m} ${ow ? "jedn." : "zpát."}: ${String(e).slice(0, 120)}`);
-            return { type: ow ? "ow" : "rt", rows: [] };
-          })
-      );
-  const [results, specialsRaw] = await Promise.all([Promise.all(jobs), specialOffers(token, origin, market)]);
-
-  const all = [];
-  const seen = new Set();
-  for (const { type, rows } of results) {
-    for (const r of rows) {
-      if (!r.destination || !r.price) continue;
-      if ((r.transfers ?? 0) > settings.maxTransfers) continue;
-      if (type === "rt" && !r.return_at) continue;
-      const dep = String(r.departure_at || "").slice(0, 10);
-      const ret = type === "rt" ? String(r.return_at).slice(0, 10) : null;
-      const id = `${type}|${r.destination}|${dep}|${ret || ""}|${r.airline}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const city = dict.cities[r.destination];
-      const country = city?.[1] || "";
-      const km = distKm(dict.cities[origin], city);
-      const nights = ret ? Math.round((Date.parse(ret) - Date.parse(dep)) / 864e5) : null;
-      if (nights !== null && nights < 0) continue;
-      all.push({
-        id,
-        type,
-        dest: r.destination,
-        destName: city?.[0] || r.destination,
-        country,
-        countryName: dict.countries[country] || country,
-        airport: r.destination_airport || r.destination,
-        price: Math.round(r.price * rate),
-        priceEur: r.price,
-        departure: String(r.departure_at || ""),
-        ret: type === "rt" ? String(r.return_at) : null,
-        nights,
-        airline: r.airline || "",
-        airlineName: dict.airlines[r.airline] || r.airline || "",
-        flightNumber: String(r.flight_number || ""),
-        transfers: r.transfers ?? 0,
-        returnTransfers: type === "rt" ? r.return_transfers ?? 0 : null,
-        duration: r.duration ?? null,
-        link: r.link ? `https://www.aviasales.com${r.link}` : "",
-        gflink: gFlights(origin, r.destination_airport || r.destination, dep, ret),
-        km,
-        longhaul: km != null ? km >= settings.longhaulKm : country ? !EUROPE.has(country) : false,
-        short: km != null ? km <= settings.shortKm : country ? EUROPE.has(country) : false,
-        baseline: null,
-        discount: null,
-        tag: null,
-        reason: null,
-      });
-    }
-  }
-
-  const historyFile = path.join(DATA, "history.json");
-  const history = await readJSON(historyFile, {});
-  const bestNow = {};
+function evaluate(all, history, settings, origin) {
   const monthMins = {};
   for (const o of all) {
-    const k = `${o.type}|${o.dest}`;
-    bestNow[k] = Math.min(bestNow[k] ?? Infinity, o.price);
+    const k = `${origin}|${o.type}|${o.dest}`;
     const mk = o.departure.slice(0, 7);
     monthMins[k] = monthMins[k] || {};
     monthMins[k][mk] = Math.min(monthMins[k][mk] ?? Infinity, o.price);
   }
-
   for (const o of all) {
-    const k = `${o.type}|${o.dest}`;
+    const k = `${origin}|${o.type}|${o.dest}`;
     const past = (history[k] || []).filter(([d]) => d !== today()).map(([, p]) => p);
     let baseline = null;
     if (past.length >= 5) baseline = median(past);
@@ -307,8 +233,7 @@ async function runScan({ digest = false } = {}) {
     const km = o.km;
     const errKm = km && o.longhaul ? km * (isRt ? settings.errorKcPerKmReturn : settings.errorKcPerKmOneWay) : null;
     const supKm = km && o.longhaul ? km * (isRt ? settings.superKcPerKmReturn : settings.superKcPerKmOneWay) : null;
-    // relativní sleva je spolehlivá jen s historií aspoň 5 dní
-    const trusted = past.length >= 5;
+    const trusted = past.length >= 5; // relativní sleva je spolehlivá jen s historií aspoň 5 dní
 
     if (errKm && o.price <= errKm) {
       o.tag = "chyba";
@@ -330,7 +255,89 @@ async function runScan({ digest = false } = {}) {
       o.reason = `${Math.round(o.discount * 100)} % pod obvyklou cenou`;
     }
   }
+}
 
+async function scanOrigin(org, ctx) {
+  const { token, settings, rate, dict, history, monthsAll } = ctx;
+  const origin = org.code;
+  const errors = [];
+  const months = monthsAll.slice(0, origin === "PRG" ? settings.months : Math.min(settings.months, settings.monthsOther));
+  const market = await pickMarket(token, origin, months[0]);
+
+  const jobs = [];
+  for (const m of months)
+    for (const ow of [true, false])
+      jobs.push(
+        pricesForMonth(token, origin, m, ow, market)
+          .then((rows) => ({ type: ow ? "ow" : "rt", rows }))
+          .catch((e) => {
+            errors.push(`${org.name} ${m} ${ow ? "jedn." : "zpát."}: ${String(e).slice(0, 100)}`);
+            return { type: ow ? "ow" : "rt", rows: [] };
+          })
+      );
+  const [results, specialsRaw] = await Promise.all([Promise.all(jobs), specialOffers(token, origin, market)]);
+
+  const all = [];
+  const seen = new Set();
+  for (const { type, rows } of results) {
+    for (const r of rows) {
+      if (!r.destination || !r.price) continue;
+      if ((r.transfers ?? 0) > settings.maxTransfers) continue;
+      if (type === "rt" && !r.return_at) continue;
+      const dep = String(r.departure_at || "").slice(0, 10);
+      const ret = type === "rt" ? String(r.return_at).slice(0, 10) : null;
+      const id = `${origin}|${type}|${r.destination}|${dep}|${ret || ""}|${r.airline}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const city = dict.cities[r.destination];
+      const country = city?.[1] || "";
+      const km = distKm(dict.cities[origin], city);
+      const nights = ret ? Math.round((Date.parse(ret) - Date.parse(dep)) / 864e5) : null;
+      if (nights !== null && nights < 0) continue;
+      const originAirport = r.origin_airport || origin;
+      all.push({
+        id,
+        origin,
+        originName: org.name,
+        originCz: !!org.cz,
+        type,
+        dest: r.destination,
+        destName: city?.[0] || r.destination,
+        country,
+        countryName: dict.countries[country] || country,
+        airport: r.destination_airport || r.destination,
+        price: Math.round(r.price * rate),
+        priceEur: r.price,
+        departure: String(r.departure_at || ""),
+        ret: type === "rt" ? String(r.return_at) : null,
+        nights,
+        airline: r.airline || "",
+        airlineName: dict.airlines[r.airline] || r.airline || "",
+        flightNumber: String(r.flight_number || ""),
+        transfers: r.transfers ?? 0,
+        returnTransfers: type === "rt" ? r.return_transfers ?? 0 : null,
+        duration: r.duration ?? null,
+        link: r.link ? `https://www.aviasales.com${r.link}` : "",
+        gflink: gFlights(originAirport, r.destination_airport || r.destination, dep, ret),
+        km,
+        longhaul: km != null ? km >= settings.longhaulKm : country ? !EUROPE.has(country) : false,
+        short: km != null ? km <= settings.shortKm : country ? EUROPE.has(country) : false,
+        baseline: null,
+        discount: null,
+        tag: null,
+        reason: null,
+      });
+    }
+  }
+
+  evaluate(all, history, settings, origin);
+
+  // historie: denní minimum pro každou destinaci a typ
+  const bestNow = {};
+  for (const o of all) {
+    const k = `${origin}|${o.type}|${o.dest}`;
+    bestNow[k] = Math.min(bestNow[k] ?? Infinity, o.price);
+  }
   const cutoff = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
   for (const [k, p] of Object.entries(bestNow)) {
     const arr = (history[k] || []).filter(([d]) => d >= cutoff && d !== today());
@@ -345,12 +352,13 @@ async function runScan({ digest = false } = {}) {
     const cur = keep.get(kk);
     if (!cur || o.price < cur.price) keep.set(kk, o);
   }
-  const tagged = all.filter((o) => o.tag === "chyba" || o.tag === "super");
   const final = new Map();
-  for (const o of [...keep.values(), ...tagged]) final.set(o.id, o);
+  for (const o of [...keep.values(), ...all.filter((o) => o.tag === "chyba" || o.tag === "super")]) final.set(o.id, o);
   const offers = [...final.values()].sort((a, b) => a.price - b.price);
 
   const specials = specialsRaw.map((x) => ({
+    origin,
+    originName: org.name,
     title: x.title || "",
     mini: x.mini_title || "",
     airline: x.airline,
@@ -364,32 +372,74 @@ async function runScan({ digest = false } = {}) {
     gflink: gFlights(origin, x.destination, String(x.departure_at || "").slice(0, 10), x.return_at ? String(x.return_at).slice(0, 10) : null),
   }));
 
+  const counts = {
+    raw: all.length,
+    offers: offers.length,
+    chyba: new Set(offers.filter((o) => o.tag === "chyba").map((o) => o.type + o.dest)).size,
+    super: new Set(offers.filter((o) => o.tag === "super").map((o) => o.type + o.dest)).size,
+    destinations: new Set(offers.map((o) => o.dest)).size,
+  };
+  return { origin, name: org.name, cz: !!org.cz, market, months, counts, offers, specials, errors };
+}
+
+async function runScan({ digest = false } = {}) {
+  const started = Date.now();
+  const cfg = await readJSON(path.join(ROOT, "config.json"), {});
+  const settings = { monthsOther: 4, notifyOrigins: ["PRG"], ...DEFAULT_SETTINGS, ...cfg };
+  const origins = (cfg.origins || DEFAULT_ORIGINS).map((o) => (typeof o === "string" ? DEFAULT_ORIGINS.find((x) => x.code === o) || { code: o, name: o } : o));
+  const status = { hasToken: !!SECRETS.tpToken, hasPush: !!SECRETS.ntfyTopic, hasEmail: !!(SECRETS.resendKey && SECRETS.email) };
+
+  if (!SECRETS.tpToken) {
+    const res = { scannedAt: new Date().toISOString(), status, settings, origins: {}, errors: ["Chybí Travelpayouts token – přidej secret TRAVELPAYOUTS_TOKEN v nastavení repozitáře."] };
+    await writeJSON(path.join(DATA, "latest.json"), res);
+    console.log(res.errors[0]);
+    return res;
+  }
+  const [rate, dict] = await Promise.all([eurRate(), dictionaries()]);
+  const now = new Date();
+  const monthsAll = [];
+  for (let i = 0; i < settings.months; i++) monthsAll.push(ym(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1))));
+
+  const historyFile = path.join(DATA, "history.json");
+  const history = await readJSON(historyFile, {});
+  // starší formát historie (bez letiště) patří Praze
+  for (const k of Object.keys(history)) if (k.split("|").length === 2) { history["PRG|" + k] = history[k]; delete history[k]; }
+
+  const ctx = { token: SECRETS.tpToken, settings, rate, dict, history, monthsAll };
+  const meta = {};
+  const errors = [];
+  const notifyOffers = [];
+  for (const org of origins) {
+    try {
+      const r = await scanOrigin(org, ctx);
+      await writeJSON(path.join(DATA, `flights-${org.code}.json`), { scannedAt: new Date().toISOString(), ...r });
+      meta[org.code] = { name: org.name, cz: !!org.cz, counts: r.counts, months: r.months, specials: r.specials.length, scannedAt: new Date().toISOString() };
+      errors.push(...r.errors.slice(0, 3));
+      if (settings.notifyOrigins.includes(org.code) || (settings.notifyOrigins.includes("CZ") && org.cz) || settings.notifyOrigins.includes("ALL")) notifyOffers.push(...r.offers);
+      console.log(`${org.name}: ${r.counts.raw} cen, ${r.counts.destinations} destinací, chyby ${r.counts.chyba}, super ${r.counts.super}`);
+    } catch (e) {
+      errors.push(`${org.name}: ${String(e).slice(0, 120)}`);
+    }
+  }
+
+  const prg = meta.PRG?.counts || {};
   const latest = {
     scannedAt: new Date().toISOString(),
     durationMs: Date.now() - started,
-    origin,
     rate,
-    market,
-    months,
+    months: monthsAll,
     status,
     settings,
-    counts: {
-      raw: all.length,
-      offers: offers.length,
-      chyba: new Set(offers.filter((o) => o.tag === "chyba").map((o) => o.type + o.dest)).size,
-      super: new Set(offers.filter((o) => o.tag === "super").map((o) => o.type + o.dest)).size,
-      destinations: new Set(offers.map((o) => o.dest)).size,
-    },
-    offers,
-    specials,
+    origins: meta,
+    counts: prg,
     errors,
   };
-
   await writeJSON(historyFile, history);
   await writeJSON(path.join(DATA, "latest.json"), latest);
 
-  const n = await notify(offers, settings, digest, latest);
-  console.log("Hotovo:", JSON.stringify({ counts: latest.counts, market, rate, notify: n, errors, ms: latest.durationMs }));
+  notifyOffers.sort((a, b) => a.price - b.price);
+  const n = await notify(notifyOffers, settings, digest, latest);
+  console.log("Hotovo:", JSON.stringify({ origins: Object.keys(meta).length, rate, notify: n, errors: errors.slice(0, 5), ms: latest.durationMs }));
   return latest;
 }
 
@@ -402,7 +452,8 @@ const flag = (cc) => (cc && cc.length === 2 ? String.fromCodePoint(...[...cc.toU
 function line(o) {
   const when = o.ret ? `${fdate(o.departure)}–${fdate(o.ret)} (${o.nights} n.)` : `${fdate(o.departure)} jednosměrně`;
   const tr = o.transfers === 0 ? "přímý" : `${o.transfers} přestup${o.transfers > 1 ? "y" : ""}`;
-  return `${flag(o.country)} ${o.destName} za ${fmt(o.price)} · ${when} · ${tr}`;
+  const from = o.origin && o.origin !== "PRG" ? `${o.originName} → ` : "";
+  return `${flag(o.country)} ${from}${o.destName} za ${fmt(o.price)} · ${when} · ${tr}`;
 }
 
 async function notify(offers, settings, digest, latest) {
@@ -414,25 +465,26 @@ async function notify(offers, settings, digest, latest) {
   const best = new Map();
   for (const o of offers) {
     if (o.tag !== "chyba" && o.tag !== "super") continue;
-    const k = `${o.type}|${o.dest}`;
+    const k = `${o.origin}|${o.type}|${o.dest}`;
     const c = best.get(k);
     if (!c || o.price < c.price) best.set(k, o);
   }
   const fresh = [...best.values()]
     .filter((o) => {
-      const p = sent[`${o.type}|${o.dest}`];
+      const p = sent[`${o.origin}|${o.type}|${o.dest}`];
       return !p || o.price < p.p * 0.9;
     })
     .sort((a, b) => (a.tag === b.tag ? a.price - b.price : a.tag === "chyba" ? -1 : 1));
 
   const out = { fresh: fresh.length };
+  const odkud = fresh.every((o) => o.origin === "PRG") ? " z Prahy" : "";
 
   if (fresh.length && settings.notifyPush && SECRETS.ntfyTopic) {
     const errs = fresh.filter((o) => o.tag === "chyba");
     const top = fresh.slice(0, 6);
     const title = errs.length
-      ? `🔥 ${errs.length}× možná chyba v ceně z Prahy!`
-      : `✈️ ${fresh.length} super levn${fresh.length === 1 ? "á letenka" : "é letenky"} z Prahy`;
+      ? `🔥 ${errs.length}× možná chyba v ceně${odkud}!`
+      : `✈️ ${fresh.length} super levn${fresh.length === 1 ? "á letenka" : "é letenky"}${odkud}`;
     out.push = await sendPush({
       title,
       message: top.map(line).join("\n") + (fresh.length > top.length ? `\n… a dalších ${fresh.length - top.length}` : ""),
@@ -454,7 +506,7 @@ async function notify(offers, settings, digest, latest) {
     out.email = await sendEmail(subject, emailHtml(fresh, offers, latest));
   }
 
-  for (const o of fresh) sent[`${o.type}|${o.dest}`] = { p: o.price, at: Date.now() };
+  for (const o of fresh) sent[`${o.origin}|${o.type}|${o.dest}`] = { p: o.price, at: Date.now() };
   await writeJSON(file, sent);
   return out;
 }

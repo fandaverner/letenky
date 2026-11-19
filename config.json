@@ -1,6 +1,6 @@
 {
-  "origin": "PRG",
   "months": 6,
+  "monthsOther": 4,
   "superOneWay": 700,
   "superReturn": 1500,
   "dealDrop": 0.35,
@@ -15,6 +15,27 @@
   "superKcPerKmReturn": 1.6,
   "errorKcPerKmOneWay": 0.6,
   "errorKcPerKmReturn": 1.0,
+  "notifyOrigins": [
+    "PRG"
+  ],
+  "origins": [
+    "PRG",
+    "BRQ",
+    "OSR",
+    "PED",
+    "KLV",
+    "VIE",
+    "BTS",
+    "MUC",
+    "NUE",
+    "DRS",
+    "LEJ",
+    "BER",
+    "KTW",
+    "KRK",
+    "WRO",
+    "LNZ"
+  ],
   "tours": {
     "enabled": true,
     "onlyCzech": true,

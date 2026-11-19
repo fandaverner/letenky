@@ -150,6 +150,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
   </div>
 
   <div class="filters" id="filters">
+    <label>Odlet <select id="fOrigin"><option value="PRG">Praha</option></select></label>
     <span class="seg" id="fType"><button data-v="any" class="on">Vše</button><button data-v="rt">Zpáteční</button><button data-v="ow">Jednosměrné</button></span>
     <span class="seg" id="fReg"><button data-v="any" class="on">Všude</button><button data-v="eu">Evropa</button><button data-v="long">Dálkové</button></span>
     <label>Do <input type="range" id="fMax" min="300" max="30000" step="100" value="30000"> <b id="fMaxV">bez limitu</b></label>
@@ -210,11 +211,34 @@ function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clea
 function ago(iso){const m=Math.round((Date.now()-new Date(iso))/60000); if(m<1)return"právě teď"; if(m<60)return`před ${m} min`; const h=Math.round(m/60); return h<24?`před ${h} h`:`před ${Math.round(h/24)} dny`}
 
 let DATA = null, STATUS = null, HIST = null, tab = "hot";
-const F = { type:"any", reg:"any", max:30000, month:"", direct:false, weekend:false, sort:"price" };
+const F = { type:"any", reg:"any", max:30000, month:"", direct:false, weekend:false, sort:"price", origin:(ls.get("origin")||"PRG") };
+const FL = {}; // data podle letiště
+const ORIGINS_FALLBACK = {PRG:{name:"Praha",cz:true}};
+function selectedOrigins(){
+  const o = DATA?.origins && Object.keys(DATA.origins).length ? DATA.origins : ORIGINS_FALLBACK;
+  if(F.origin==="CZ") return Object.keys(o).filter(k=>o[k].cz);
+  if(F.origin==="ALL") return Object.keys(o);
+  return o[F.origin] ? [F.origin] : ["PRG"];
+}
+async function ensureOrigins(force=false){
+  const need = selectedOrigins().filter(c=>force || !FL[c] || FL[c]._at !== DATA?.origins?.[c]?.scannedAt);
+  await Promise.all(need.map(async c=>{
+    try{ const d = await (await fetch(`data/flights-${c}.json?t=`+Date.now())).json(); d._at = DATA?.origins?.[c]?.scannedAt; FL[c]=d; }catch{}
+  }));
+}
+function fillOriginSelect(){
+  const o = DATA?.origins || {}; const sel = $("#fOrigin"); if(!Object.keys(o).length) return;
+  const cz = Object.keys(o).filter(k=>o[k].cz), fx = Object.keys(o).filter(k=>!o[k].cz);
+  sel.innerHTML = `<optgroup label="Česko"><option value="PRG">Praha</option><option value="CZ">všechna česká letiště</option>${cz.filter(k=>k!=="PRG").map(k=>`<option value="${k}">${esc(o[k].name)}</option>`).join("")}</optgroup>`+
+    `<optgroup label="Okolí"><option value="ALL">Česko + všechna okolní</option>${fx.map(k=>`<option value="${k}">${esc(o[k].name)}</option>`).join("")}</optgroup>`;
+  sel.value = F.origin; if(sel.value!==F.origin){ F.origin="PRG"; sel.value="PRG"; }
+}
 
 async function load(){
   try{ const r = await fetch("data/latest.json?t="+Date.now()); DATA = await r.json(); STATUS = DATA.status || {}; }
   catch(e){ $("#sub").textContent = "Nepodařilo se načíst data."; return; }
+  if(DATA.offers && !DATA.origins){ FL.PRG = { offers:DATA.offers, specials:DATA.specials||[], counts:DATA.counts }; } // starší formát
+  else { fillOriginSelect(); await ensureOrigins(); }
   render();
 }
 
@@ -229,16 +253,22 @@ function renderSetup(){
 
 function render(){
   renderSetup();
-  const D = DATA, offers = D.offers||[];
-  const running = "";
+  const D = DATA, sel = selectedOrigins();
+  const offers = sel.flatMap(c=>FL[c]?.offers||[]);
+  const specials = sel.flatMap(c=>FL[c]?.specials||[]);
+  const raw = sel.reduce((n,c)=>n+(D.origins?.[c]?.counts?.raw ?? FL[c]?.counts?.raw ?? 0),0);
+  const multi = sel.length>1;
+  const oname = multi ? (F.origin==="CZ"?"z českých letišť":"z Česka a okolí") : "z "+(({PRG:"Prahy",BRQ:"Brna",OSR:"Ostravy",PED:"Pardubic",KLV:"Karlových Varů",VIE:"Vídně",BTS:"Bratislavy",MUC:"Mnichova",NUE:"Norimberku",DRS:"Drážďan",LEJ:"Lipska",BER:"Berlína",KTW:"Katovic",KRK:"Krakova",WRO:"Vratislavi",LNZ:"Lince"})[sel[0]]||sel[0]);
+  $("#h1").innerHTML = `Levné letenky <span class="from">${esc(oname)}</span>`;
   $("#sub").innerHTML = D.scannedAt
-    ? `Poslední hledání <b>${ago(D.scannedAt)}</b> · ${D.counts?.raw?.toLocaleString("cs-CZ")||0} cen · kurz ${D.rate||"?"} Kč/€ · hlídám 6× denně${running}`
+    ? `Poslední hledání <b>${ago(D.scannedAt)}</b> · ${raw.toLocaleString("cs-CZ")} cen · kurz ${D.rate||"?"} Kč/€ · hlídám 6× denně`
     : `Zatím neproběhlo žádné hledání.`;
   $("#errs").innerHTML = (D.errors||[]).length ? `<div class="err">⚠️ ${D.errors.map(esc).join("<br>")}</div>` : "";
-  $("#sChyba").textContent = D.counts?.chyba ?? 0;
-  $("#sSuper").textContent = D.counts?.super ?? 0;
+  const uniq = t => new Set(offers.filter(o=>o.tag===t).map(o=>o.type+o.dest)).size;
+  $("#sChyba").textContent = uniq("chyba");
+  $("#sSuper").textContent = uniq("super");
   $("#sMin").textContent = offers.length ? kc(Math.min(...offers.map(o=>o.price))) : "–";
-  $("#sDest").textContent = D.counts?.destinations ?? 0;
+  $("#sDest").textContent = new Set(offers.map(o=>o.dest)).size;
 
   const mSel = $("#fMonth"), cur = mSel.value;
   mSel.innerHTML = `<option value="">jakýkoli</option>` + (D.months||[]).map(m=>`<option value="${m}">${MONTHS[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join("");
@@ -253,13 +283,13 @@ function render(){
     all: (()=>{const m=new Map(); for(const o of f){if(!m.has(o.dest)||o.price<m.get(o.dest).price)m.set(o.dest,o)} return [...m.values()]})(),
   };
   $("#cHot").textContent = sets.hot.length; $("#cSuper").textContent = sets.super.length; $("#cAll").textContent = sets.all.length;
-  $("#cSpec").textContent = (D.specials||[]).length;
+  $("#cSpec").textContent = specials.length;
   $("#filters").style.display = tab==="spec" ? "none" : "";
 
   const g = $("#grid");
   if(tab==="spec"){
-    const sp = D.specials||[];
-    g.innerHTML = sp.length ? sp.map(specCard).join("") : `<div class="empty">Teď nejsou žádné akce aerolinek z Prahy.</div>`;
+    const sp = [...specials].sort((a,b)=>a.price-b.price);
+    g.innerHTML = sp.length ? sp.map(specCard).join("") : `<div class="empty">Teď nejsou žádné akce aerolinek ${esc(oname)}.</div>`;
     return;
   }
   const list = sort(sets[tab]);
@@ -296,24 +326,25 @@ function card(o, all){
   const badge = o.tag==="chyba" ? `<span class="badge chyba">🔥 CHYBA V CENĚ?</span>` : o.tag==="super" ? `<span class="badge super">SUPER CENA</span>` : o.tag==="dobra" ? `<span class="badge dobra">POD PRŮMĚREM</span>` : "";
   const when = o.ret ? `${dw(o.departure)} → ${dw(o.ret)}` : dw(o.departure);
   const tr = t => t===0 ? `<span class="pill d">přímý</span>` : `<span class="pill">${t} přestup${t>1?"y":""}</span>`;
-  const others = all.filter(x=>x.dest===o.dest && x.type===o.type && x.id!==o.id).sort((a,b)=>a.departure.localeCompare(b.departure)).slice(0,8);
-  return `<div class="card ${o.tag||""}" data-dest="${o.dest}" data-type="${o.type}">
+  const others = all.filter(x=>x.dest===o.dest && x.type===o.type && x.id!==o.id).sort((a,b)=>a.price-b.price).slice(0,10).sort((a,b)=>a.departure.localeCompare(b.departure));
+  const org = o.origin||"PRG", multiO = all.some(x=>(x.origin||"PRG")!==org);
+  return `<div class="card ${o.tag||""}" data-dest="${o.dest}" data-type="${o.type}" data-origin="${org}">
     ${badge}
     <div class="top">
       <div><div class="dest">${flag(o.country)} ${esc(o.destName)}</div><div class="ctry">${esc(o.countryName)} · ${esc(o.airport)}${o.km?` · ${o.km.toLocaleString("cs-CZ")} km`:""}</div></div>
       <div class="price">${kc(o.price)}<small>${o.type==="rt"?"zpáteční":"jednosměrná"}</small></div>
     </div>
-    <div class="route">PRG ${tm(o.departure)}<span class="ln"></span>✈<span class="ln"></span>${esc(o.airport)}</div>
+    <div class="route">${org!=="PRG"?`<b style="color:var(--acc)">${esc(o.originName||org)}</b> `:""}${org} ${tm(o.departure)}<span class="ln"></span>✈<span class="ln"></span>${esc(o.airport)}</div>
     <div class="meta"><span class="pill">📅 ${when}</span>${o.nights!=null?`<span class="pill">${o.nights} nocí</span>`:""}${tr(o.transfers)}${o.airlineName?`<span class="pill">${esc(o.airlineName)}</span>`:""}</div>
     ${o.reason?`<div class="reason">${esc(o.reason)}${o.baseline&&o.tag!=="chyba"?` · obvykle ${kc(o.baseline)}`:""}</div>`:""}
     <div class="links"><a href="${o.gflink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Google Flights ↗</a>${o.link?`<a href="${o.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Aviasales ↗</a>`:""}</div>
     <div class="more"><div class="hint">Vývoj nejnižší ceny</div><svg class="spark"></svg>
-      ${others.length?`<table>${others.map(x=>`<tr><td>${x.ret?`${d(x.departure)} – ${d(x.ret)}`:d(x.departure)}</td><td>${x.transfers===0?"přímý":x.transfers+" př."}</td><td class="p"><a href="${x.gflink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${kc(x.price)}</a></td></tr>`).join("")}</table>`:""}
+      ${others.length?`<table>${others.map(x=>`<tr>${multiO?`<td>${esc(x.originName||x.origin||"Praha")}</td>`:""}<td>${x.ret?`${d(x.departure)} – ${d(x.ret)}`:d(x.departure)}</td><td>${x.transfers===0?"přímý":x.transfers+" př."}</td><td class="p"><a href="${x.gflink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${kc(x.price)}</a></td></tr>`).join("")}</table>`:""}
     </div>
   </div>`;
 }
 function specCard(s){
-  return `<div class="card super"><span class="badge super">AKCE ${esc(s.airlineName||"")}</span>
+  return `<div class="card super"><span class="badge super">AKCE ${esc(s.airlineName||"")}${s.origin&&s.origin!=="PRG"?` · z ${esc(s.originName||s.origin)}`:""}</span>
     <div class="top"><div><div class="dest">✈️ ${esc(s.destName)}</div><div class="ctry">${esc(s.title||s.mini||"")}</div></div><div class="price">${kc(s.price)}</div></div>
     <div class="meta" style="margin-top:10px"><span class="pill">📅 ${dw(s.departure)}${s.ret?" → "+dw(s.ret):""}</span></div>
     <div class="links"><a href="${s.gflink}" target="_blank" rel="noopener">Google Flights ↗</a>${s.link?`<a href="${s.link}" target="_blank" rel="noopener">Aviasales ↗</a>`:""}</div></div>`;
@@ -323,7 +354,7 @@ async function spark(el){
   const svg = $(".spark", el); if(svg.dataset.done) return; svg.dataset.done=1;
   try{
     if(!HIST) HIST = await (await fetch("data/history.json?t="+Date.now())).json();
-    const points = HIST[`${el.dataset.type}|${el.dataset.dest}`] || [];
+    const points = HIST[`${el.dataset.origin}|${el.dataset.type}|${el.dataset.dest}`] || HIST[`${el.dataset.type}|${el.dataset.dest}`] || [];
     if(points.length<2){ svg.outerHTML = `<div class="hint">Historie se teprve sbírá (${points.length} den).</div>`; return; }
     const W=300,H=46, ps=points.map(p=>p[1]), mn=Math.min(...ps), mx=Math.max(...ps)||1;
     const xy = points.map((p,i)=>[i/(points.length-1)*W, H-4-(p[1]-mn)/((mx-mn)||1)*(H-8)]);
@@ -339,6 +370,7 @@ $("#tabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; tab
 for(const [id,key] of [["#fType","type"],["#fReg","reg"]]) $(id).onclick = e => { const b=e.target.closest("button"); if(!b) return; F[key]=b.dataset.v; $$("button",$(id)).forEach(x=>x.classList.toggle("on",x===b)); render(); };
 $("#fMax").oninput = e => { F.max=+e.target.value; $("#fMaxV").textContent = F.max>=30000?"bez limitu":kc(F.max); render(); };
 $("#fMonth").onchange = e => { F.month=e.target.value; render(); };
+$("#fOrigin").onchange = async e => { F.origin=e.target.value; ls.set("origin",F.origin); $("#grid").innerHTML=`<div class="empty"><span class="spin"></span> Načítám…</div>`; await ensureOrigins(); render(); };
 $("#fDirect").onchange = e => { F.direct=e.target.checked; render(); };
 $("#fWeekend").onchange = e => { F.weekend=e.target.checked; render(); };
 $("#fSort").onchange = e => { F.sort=e.target.value; render(); };
