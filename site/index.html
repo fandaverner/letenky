@@ -177,6 +177,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
   </div>
   <div class="filters">
     <label>Do <input type="range" id="tMax" min="5000" max="80000" step="1000" value="80000"> <b id="tMaxV">bez limitu</b></label>
+    <span class="seg" id="tReg"><button data-v="" class="on">Všude</button><button data-v="eu">Evropa</button><button data-v="near">Egypt, Turecko…</button><button data-v="exo">Exotika</button></span>
     <label>Země <select id="tCountry"><option value="">všechny</option></select></label>
     <label>Strava <select id="tBoard"><option value="">jakákoli</option><option value="all">All inclusive</option><option value="pol">aspoň polopenze</option></select></label>
     <label>Odlet <select id="tDep"><option value="cz">z ČR</option><option value="Praha">jen Praha</option><option value="">odkudkoli</option></select></label>
@@ -466,7 +467,10 @@ function openSettings(need){
 
 // ---------- zájezdy ----------
 let TOURS = null, ttab = "good";
-const TF = { max:80000, country:"", board:"", dep:"cz", fly:true, sort:"price" };
+const TF = { max:80000, country:"", board:"", dep:"cz", fly:true, sort:"price", reg:"" };
+const EU_C = new Set(["Itálie","Kanárské ostrovy","Španělsko","Portugalsko","Madeira","Azory","Baleárské ostrovy","Mallorca","Francie","Korsika","Polsko","Lotyšsko","Kypr","Maďarsko","Litva","Estonsko","Chorvatsko","Řecko","Kréta","Rhodos","Česká republika","Velká Británie","Slovensko","Slovinsko","Švédsko","Irsko","Belgie","Nizozemsko","Bulharsko","Norsko","Finsko","Dánsko","Černá Hora","Albánie","Island","Malta","Rakousko","Německo","Švýcarsko","Rumunsko","Srbsko","Bosna a Hercegovina","Severní Makedonie","Lucembursko","Monako","Sicílie","Sardinie"]);
+const NEAR_C = new Set(["Egypt","Turecko","Maroko","Tunisko","Jordánsko","Izrael","Gruzie"]);
+const tReg = c => { const b = String(c||"").replace(/\s*-\s*(lyže|hory).*$/i,""); return EU_C.has(b) ? "eu" : NEAR_C.has(b) ? "near" : "exo"; };
 const stars = n => n ? "★".repeat(Math.floor(n)) + (n % 1 ? "+" : "") : "";
 async function loadTours(){
   try{ TOURS = await (await fetch("data/tours.json?t="+Date.now())).json(); }catch{ TOURS = { offers:[] }; }
@@ -482,6 +486,7 @@ function renderTours(){
   const f = all.filter(o=>{
     if(TF.max<80000 && o.price>TF.max) return false;
     if(TF.country && o.country!==TF.country) return false;
+    if(TF.reg && tReg(o.country)!==TF.reg) return false;
     if(TF.fly && o.transport!=="letecky") return false;
     if(TF.dep==="cz" && !o.fromCZ) return false;
     if(TF.dep==="Praha" && o.depCity!=="Praha") return false;
@@ -516,6 +521,12 @@ function tcard(o){
 $("#ttabs").onclick = e => { const b=e.target.closest(".tab"); if(!b) return; ttab=b.dataset.t; $$(".tab",$("#ttabs")).forEach(x=>x.classList.toggle("on",x===b)); renderTours(); };
 $("#tMax").oninput = e => { TF.max=+e.target.value; $("#tMaxV").textContent = TF.max>=80000?"bez limitu":kc(TF.max); renderTours(); };
 $("#tCountry").onchange = e => { TF.country=e.target.value; renderTours(); };
+$("#tReg").onclick = e => { const b=e.target.closest("button"); if(!b) return; TF.reg=b.dataset.v; $$("button",$("#tReg")).forEach(x=>x.classList.toggle("on",x===b));
+  // nabídka zemí jen pro zvolenou oblast
+  const cs=[...new Set((TOURS?.offers||[]).map(o=>o.country))].filter(c=>!TF.reg||tReg(c)===TF.reg).sort((a,b)=>a.localeCompare(b,"cs"));
+  if(TF.country && !cs.includes(TF.country)) TF.country="";
+  $("#tCountry").innerHTML=`<option value="">všechny</option>`+cs.map(c=>`<option>${esc(c)}</option>`).join(""); $("#tCountry").value=TF.country;
+  renderTours(); };
 $("#tBoard").onchange = e => { TF.board=e.target.value; renderTours(); };
 $("#tDep").onchange = e => { TF.dep=e.target.value; renderTours(); };
 $("#tFly").onchange = e => { TF.fly=e.target.checked; renderTours(); };
