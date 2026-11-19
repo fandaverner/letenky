@@ -347,6 +347,14 @@ $("#grid").onclick = e => { const c=e.target.closest(".card[data-dest]"); if(!c)
 const REPO = "https://github.com/fandaverner/letenky";
 // Spuštění hledání přímo z webu přes GitHub API. Klíč je uložený jen v tomto prohlížeči.
 const ghToken = () => ls.get("ghtoken") || "";
+(function keyFromLink(){
+  const m = location.hash.match(/klic=([A-Za-z0-9_]+)/);
+  if(!m) return;
+  ls.set("ghtoken", m[1]);
+  try{ history.replaceState(null,"",location.pathname+location.search+(location.hash.includes("zajezdy")?"#zajezdy":"")); }catch{}
+  setTimeout(()=>toast("Klíč uložen – „Hledat teď“ funguje i na tomhle zařízení ✓"),500);
+})();
+const keyLink = () => location.origin+location.pathname+"#klic="+ghToken();
 async function dispatch(testNotify=false){
   const r = await fetch("https://api.github.com/repos/fandaverner/letenky/actions/workflows/scan.yml/dispatches",{
     method:"POST", headers:{Authorization:"Bearer "+ghToken(),Accept:"application/vnd.github+json","Content-Type":"application/json"},
@@ -385,7 +393,10 @@ function tokenBox(need){
     4. <b>Permissions → Repository → Actions</b> → <b>Read and write</b> (nic dalšího)<br>
     5. Generate token, zkopíruj a vlož sem:</div>
     <div style="display:flex;gap:8px;margin-top:8px"><input type="password" id="ghtok" placeholder="${has?"klíč je uložený – vlož nový pro změnu":"github_pat_…"}" style="flex:1"><button class="btn pri" id="ghsave">Uložit</button></div>
-    <div class="hint" style="margin-top:6px">Klíč zůstane jen v tomto prohlížeči (na každém zařízení ho zadáš zvlášť) a umí jen spouštět hledání.</div>`;
+    <div class="hint" style="margin-top:6px">Klíč se ukládá jen v prohlížeči a umí jen spouštět hledání.</div>
+    ${has?`<h4>Odkaz pro další zařízení</h4>
+    <div class="hint">Otevři tenhle odkaz v mobilu nebo jiném počítači (pošli si ho třeba sám sobě) a „Hledat teď“ bude fungovat i tam. Klidně si ho ulož do záložek. <b>Nikomu ho nedávej</b> – obsahuje tvůj klíč.</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><input type="text" readonly value="${keyLink()}" id="klink" style="flex:1;font-size:12px"><button class="btn" id="kcopy">Kopírovat</button></div>`:""}`;
 }
 function openSettings(need){
   const s = DATA?.settings || {}; const st = STATUS || {};
@@ -413,10 +424,11 @@ function openSettings(need){
     const v = $("#ghtok").value.trim(); if(!v) return toast("Vlož klíč");
     ls.set("ghtoken", v);
     try{ const r = await fetch("https://api.github.com/repos/fandaverner/letenky/actions/workflows/scan.yml",{headers:{Authorization:"Bearer "+v}});
-      if(!r.ok) throw new Error(r.status); toast("Klíč funguje ✓"); dlg.close(); }
+      if(!r.ok) throw new Error(r.status); toast("Klíč funguje ✓"); openSettings(); }
     catch(e){ toast("Klíč nefunguje – zkontroluj oprávnění (HTTP "+e.message+")"); }
   };
   $("#scanD").onclick = () => { dlg.close(); scanNow(); };
+  if($("#kcopy")) $("#kcopy").onclick = async () => { try{ await navigator.clipboard.writeText(keyLink()); toast("Odkaz zkopírován ✓"); }catch{ $("#klink").select(); toast("Označeno – zkopíruj Ctrl+C"); } };
   $("#testN").onclick = async () => { if(!ghToken()) return toast("Nejdřív ulož klíč"); try{ await dispatch(true); toast("Test odeslán – upozornění přijde do minuty"); }catch(e){ toast(e.message); } };
 }
 
