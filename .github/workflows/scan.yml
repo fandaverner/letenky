@@ -3,8 +3,9 @@ name: Hledat letenky
 
 on:
   schedule:
-    # UTC časy; 6:07 UTC = 7:07 v Praze (zimní čas) → ranní e-mailový přehled
-    - cron: "7 2,6,10,14,18,22 * * *"
+    # GitHub plánovaná spuštění často vynechává, proto se budí každou hodinu
+    # a skript sám pozná, jestli je co dělat (letenky ~ každé 4 h, zájezdy ~ každých 6 h).
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       test_notify:
@@ -47,25 +48,26 @@ jobs:
         if: ${{ inputs.test_notify }}
         run: node scripts/scan.mjs --test-notify
 
+      - name: Co je potřeba udělat
+        id: plan
+        run: node scripts/plan.mjs "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Hledat levné letenky
-        if: ${{ !inputs.test_notify }}
-        run: |
-          if [ "$(date -u +%H)" = "06" ] && [ "${{ github.event_name }}" = "schedule" ]; then export DIGEST=true; fi
-          node scripts/scan.mjs
+        if: ${{ !inputs.test_notify && steps.plan.outputs.flights == 'true' }}
+        env:
+          DIGEST: ${{ steps.plan.outputs.digest }}
+          DEFER_NOTIFY: "1"
+        run: node scripts/scan.mjs
 
       - name: Hledat levné zájezdy
-        if: ${{ !inputs.test_notify }}
+        if: ${{ !inputs.test_notify && steps.plan.outputs.tours == 'true' }}
         continue-on-error: true
-        run: |
-          H=$(date -u +%H)
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$H" = "06" ] || [ "$H" = "14" ] || [ "$H" = "18" ] || [ ! -f site/data/tours.json ]; then
-            node scripts/tours.mjs
-          else
-            echo "Zájezdy se hledají 3× denně (7, 15 a 19 h)."
-          fi
+        env:
+          DEFER_NOTIFY: "1"
+        run: node scripts/tours.mjs
 
       - name: Uložit data
-        if: ${{ !inputs.test_notify }}
+        if: ${{ !inputs.test_notify && steps.plan.outputs.any == 'true' }}
         run: |
           git config user.name "hlidac-letenek"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -75,8 +77,16 @@ jobs:
           git push || true
 
       - uses: actions/configure-pages@v5
+        if: ${{ steps.plan.outputs.any == 'true' || inputs.test_notify }}
       - uses: actions/upload-pages-artifact@v3
+        if: ${{ steps.plan.outputs.any == 'true' || inputs.test_notify }}
         with:
           path: site
       - id: deploy
+        if: ${{ steps.plan.outputs.any == 'true' || inputs.test_notify }}
         uses: actions/deploy-pages@v4
+
+      # upozornění až po aktualizaci webu, aby po kliknutí byla vidět nová data
+      - name: Poslat upozornění
+        if: ${{ always() && !inputs.test_notify }}
+        run: node scripts/outbox.mjs

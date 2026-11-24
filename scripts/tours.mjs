@@ -22,7 +22,7 @@ const DEFAULTS = {
   minRatingPct: 60, // horší hotely neposílat do upozornění
   onlyCzech: true, // hlásit jen zájezdy s odletem z ČR
   maxPagesCedok: 45,
-  maxPagesBlueStyle: 20,
+  maxPagesBlueStyle: 1, // další stránky jejich web nevydá, zbytečně by je to zatěžovalo
 };
 
 const CZ = ["Praha", "Brno", "Ostrava", "Pardubice", "Karlovy Vary"];
@@ -39,8 +39,12 @@ async function writeJSON(f, d) {
   await mkdir(path.dirname(f), { recursive: true });
   await writeFile(f, JSON.stringify(d));
 }
-async function getHTML(url) {
+async function getHTML(url, retry = 1) {
   const r = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "cs-CZ,cs;q=0.9", Accept: "text/html" } });
+  if (r.status === 429 && retry > 0) {
+    await sleep(30000); // web chce zpomalit – počkat a zkusit jednou znovu
+    return getHTML(url, retry - 1);
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.text();
 }
@@ -90,7 +94,14 @@ async function run() {
   const started = Date.now();
   const errors = [];
 
-  const [cedok, blue] = await Promise.all([crawlCedok(cfg.maxPagesCedok, errors), crawlBlueStyle(cfg.maxPagesBlueStyle, errors)]);
+  const [cedok, blueNow] = await Promise.all([crawlCedok(cfg.maxPagesCedok, errors), crawlBlueStyle(cfg.maxPagesBlueStyle, errors)]);
+  // když Blue Style zrovna neodpoví, ponech jejich nabídky z minula (max. 2 dny staré)
+  let blue = blueNow;
+  if (!blueNow.length) {
+    const prevT = await readJSON(path.join(DATA, "tours.json"), null);
+    const oldBlue = (prevT?.offers || []).filter((o) => o.ck === "Blue Style" && (o.checkedAt || prevT.scannedAt) > new Date(Date.now() - 2 * 864e5).toISOString());
+    blue = oldBlue.map((o) => ({ ...o, checkedAt: o.checkedAt || prevT.scannedAt }));
+  }
   const sources = { "Čedok": cedok.length, "Blue Style": blue.length };
 
   // sloučit, nejlevnější varianta pro stejný hotel + termín
@@ -101,6 +112,8 @@ async function run() {
     if (!c || o.price < c.price) map.set(o.id, o);
   }
   const offers = [...map.values()];
+  const nowIso = new Date().toISOString();
+  for (const o of offers) if (!o.checkedAt) o.checkedAt = nowIso;
 
   // historie cen pro každý konkrétní termín
   const histFile = path.join(CACHE, "tours-history.json");

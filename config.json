@@ -46,6 +46,6 @@
     "dropPct": 15,
     "minRatingPct": 60,
     "maxPagesCedok": 45,
-    "maxPagesBlueStyle": 20
+    "maxPagesBlueStyle": 1
   }
 }

@@ -5,10 +5,31 @@ const SECRETS = {
   email: env("ALERT_EMAIL"),
   ntfyTopic: env("NTFY_TOPIC"),
 };
+import { readFile, writeFile, rm } from "node:fs/promises";
+const OUTBOX = "/tmp/letenky-outbox.json";
+const DEFER = process.env.DEFER_NOTIFY === "1";
+async function defer(kind, args) {
+  let box = [];
+  try { box = JSON.parse(await readFile(OUTBOX, "utf8")); } catch {}
+  box.push({ kind, args });
+  await writeFile(OUTBOX, JSON.stringify(box));
+  return "odloženo";
+}
+export async function flushOutbox() {
+  let box = [];
+  try { box = JSON.parse(await readFile(OUTBOX, "utf8")); } catch { return []; }
+  const out = [];
+  for (const { kind, args } of box) out.push(kind === "push" ? await sendPushNow(...args) : await sendEmailNow(...args));
+  await rm(OUTBOX, { force: true });
+  return out;
+}
+export const sendPush = (...a) => (DEFER ? defer("push", a) : sendPushNow(...a));
+export const sendEmail = (...a) => (DEFER ? defer("email", a) : sendEmailNow(...a));
+
 export const canPush = () => !!SECRETS.ntfyTopic;
 export const canEmail = () => !!(SECRETS.resendKey && SECRETS.email);
 
-export async function sendPush(m) {
+async function sendPushNow(m) {
   const topic = SECRETS.ntfyTopic.replace(/^https?:\/\/ntfy\.sh\//, "").replace(/[\s"'\/]/g, "");
   const hint = `téma ${topic.length} znaků, začíná „${topic.slice(0, 9)}“, končí „${topic.slice(-2)}“`;
   try {
@@ -33,7 +54,7 @@ export async function sendPush(m) {
   }
 }
 
-export async function sendEmail(subject, html) {
+async function sendEmailNow(subject, html) {
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

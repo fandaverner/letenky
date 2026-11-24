@@ -187,7 +187,7 @@ footer{color:var(--mute);font-size:12px;margin-top:30px;text-align:center;line-h
   <div class="grid" id="tgrid"></div>
   </div>
 
-  <footer>Zájezdy: last minute nabídky CK Čedok a Blue Style, ceny za osobu. Letenky:  ceny z vyhledávání uživatelů Aviasales za posledních 48 h a přepočítávají se kurzem ČNB.<br>
+  <footer>Zájezdy: last minute nabídky CK Čedok a Blue Style. Ceny jsou „od“ za osobu, obvykle při 2 dospělých ve dvoulůžkovém pokoji – u CK se může cena lišit podle typu pokoje, obsazenosti a toho, jak se mezitím změnila. Letenky:  ceny z vyhledávání uživatelů Aviasales za posledních 48 h a přepočítávají se kurzem ČNB.<br>
   „Chyba v ceně“ = výrazně pod obvyklou cenou dané destinace nebo podezřele levný dálkový let. Před nákupem vždy ověř aktuální cenu.</footer>
 </div>
 
@@ -224,7 +224,7 @@ function selectedOrigins(){
 async function ensureOrigins(force=false){
   const need = selectedOrigins().filter(c=>force || !FL[c] || FL[c]._at !== DATA?.origins?.[c]?.scannedAt);
   await Promise.all(need.map(async c=>{
-    try{ const d = await (await fetch(`data/flights-${c}.json?t=`+Date.now())).json(); d._at = DATA?.origins?.[c]?.scannedAt; FL[c]=d; }catch{}
+    try{ const d = await (await fetch(`data/flights-${c}.json?t=`+Date.now(),{cache:"no-store"})).json(); d._at = DATA?.origins?.[c]?.scannedAt; FL[c]=d; }catch{}
   }));
 }
 function fillOriginSelect(){
@@ -236,7 +236,7 @@ function fillOriginSelect(){
 }
 
 async function load(){
-  try{ const r = await fetch("data/latest.json?t="+Date.now()); DATA = await r.json(); STATUS = DATA.status || {}; }
+  try{ const r = await fetch("data/latest.json?t="+Date.now(),{cache:"no-store"}); DATA = await r.json(); STATUS = DATA.status || {}; }
   catch(e){ $("#sub").textContent = "Nepodařilo se načíst data."; return; }
   if(DATA.offers && !DATA.origins){ FL.PRG = { offers:DATA.offers, specials:DATA.specials||[], counts:DATA.counts }; } // starší formát
   else { fillOriginSelect(); await ensureOrigins(); }
@@ -473,7 +473,7 @@ const NEAR_C = new Set(["Egypt","Turecko","Maroko","Tunisko","Jordánsko","Izrae
 const tReg = c => { const b = String(c||"").replace(/\s*-\s*(lyže|hory).*$/i,""); return EU_C.has(b) ? "eu" : NEAR_C.has(b) ? "near" : "exo"; };
 const stars = n => n ? "★".repeat(Math.floor(n)) + (n % 1 ? "+" : "") : "";
 async function loadTours(){
-  try{ TOURS = await (await fetch("data/tours.json?t="+Date.now())).json(); }catch{ TOURS = { offers:[] }; }
+  try{ TOURS = await (await fetch("data/tours.json?t="+Date.now(),{cache:"no-store"})).json(); }catch{ TOURS = { offers:[] }; }
   const cs = [...new Set((TOURS.offers||[]).map(o=>o.country))].sort((a,b)=>a.localeCompare(b,"cs"));
   const sel = $("#tCountry"), cur = sel.value;
   sel.innerHTML = `<option value="">všechny</option>` + cs.map(c=>`<option>${esc(c)}</option>`).join(""); sel.value = cur;
@@ -515,6 +515,7 @@ function tcard(o){
       <div class="meta" style="margin-top:10px"><span class="pill">📅 ${dw(o.from)} → ${dw(o.to)}</span><span class="pill">${o.nights} nocí</span>${o.board?`<span class="pill">🍽 ${esc(o.board)}</span>`:""}${o.depCity?`<span class="pill">✈ ${esc(o.depCity)}</span>`:""}</div>
       ${o.reason?`<div class="reason">${esc(o.reason)}</div>`:""}
       <div class="pr"><div>${o.orig?`<span class="old">${kc(o.orig)}</span>`:""}<span class="now">${kc(o.price)}</span> <span class="pn">/os.</span></div>${o.perNight?`<span class="pn">${kc(o.perNight)}/noc</span>`:""}</div>
+      <div class="pn" style="margin-top:6px">Cena za osobu (obvykle při 2 dospělých) · ověřeno ${ago(o.checkedAt||TOURS.scannedAt)}</div>
       <a class="go" href="${esc(o.url)}" target="_blank" rel="noopener">Zobrazit u ${esc(o.ck)} ↗</a>
     </div></div>`;
 }
